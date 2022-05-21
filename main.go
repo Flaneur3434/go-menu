@@ -5,8 +5,9 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
+	"image"
 	"os"
-	"time"
+	_ "time"
 )
 
 //  dmenu  [-bfiv]  [-l  lines]  [-m monitor] [-p prompt] [-fn font] [-nb color]
@@ -34,6 +35,7 @@ var (
 	help            bool
 	display         *draw.Display
 	keyboard        *draw.Keyboardctl
+	mouse           *draw.Mousectl
 )
 
 func init() {
@@ -70,6 +72,7 @@ func main() {
 
 	display, _ = draw.Init(nil, "", "test", "")
 	keyboard = display.InitKeyboard()
+	mouse = display.InitMouse()
 
 	scanner := bufio.NewScanner(os.Stdin)
 	const inputDefaultSize = 4098
@@ -85,11 +88,26 @@ func main() {
 		fmt.Fprintln(os.Stderr, "reading err: ", err)
 	}
 
-	display.AllocImage(draw.Rect(100, 100, 200, 200), draw.RGB24, true, draw.Red)
-	display.Flush()
+	screen := display.Image
+	o := screen.R.Min
+	pad := 20
+	size := 100
+	display.Top()
 
-	for i := 0; i < 3; i++ {
-		time.Sleep(1 * time.Second)
+	screen.Draw(draw.Rect(o.X+pad, o.Y+pad, o.X+pad+size, o.Y+pad+size), display.Black, nil, image.ZP)
+	screen.String(draw.Pt(o.X+pad, o.Y+pad+size), display.Black, image.ZP, display.Font, "draw")
+
+	screen.Ellipse(draw.Pt(o.X+pad+size*2, o.Y+pad+size/2), size/2, size/2, 1, display.Black, image.ZP)
+	screen.String(draw.Pt(o.X+pad+size, o.Y+pad+size), display.Black, image.ZP, display.Font, "fillellipse")
+
+	screen.FillArc(draw.Pt(o.X+pad+size*4, o.Y+pad+size), size, size, display.Black, image.ZP, 0, 90)
+	screen.String(draw.Pt(o.X+pad+size*4, o.Y+pad+size), display.Black, image.ZP, display.Font, "fillarc")
+
+	for {
+		mouseEvent := mouse.Read()
+		if mouseEvent.Buttons == 4 {
+			break
+		}
 	}
 
 	fmt.Printf("%s", input)
