@@ -1,18 +1,24 @@
 package main
 
 import (
-	"9fans.net/go/draw"
 	"bufio"
 	"flag"
 	"fmt"
-	"image"
 	"os"
-	_ "time"
+
+	"github.com/veandco/go-sdl2/sdl"
+	"github.com/veandco/go-sdl2/ttf"
 )
 
 //  dmenu  [-bfiv]  [-l  lines]  [-m monitor] [-p prompt] [-fn font] [-nb color]
 //       [-nf color] [-sb color] [-sf color] [-nhb color] [-nhf color]  [-shb  color]
 //       [-shf color] [-w windowid]
+
+const (
+	fontSize                  = 16
+	inputDefaultSize          = 10
+	defaultGrowthSize float64 = 1.2
+)
 
 var (
 	bottom          bool
@@ -21,7 +27,7 @@ var (
 	lines           int
 	monitor         int
 	prompt          string
-	font            string
+	fontPath        string
 	normBackg       string
 	normForeg       string
 	selBackg        string
@@ -33,10 +39,19 @@ var (
 	version         bool
 	windowId        string
 	help            bool
-	display         *draw.Display
-	keyboard        *draw.Keyboardctl
-	mouse           *draw.Mousectl
 )
+
+type Menu struct {
+	window   *sdl.Window
+	surface  *sdl.Surface
+	font     *ttf.Font
+	itemList []Item
+}
+
+type Item struct {
+	renderedText *sdl.Surface
+	text         string
+}
 
 func init() {
 	flag.BoolVar(&bottom, "b", false, "dmenu appears at the bottom of the screen")
@@ -45,7 +60,7 @@ func init() {
 	flag.IntVar(&lines, "l", 5, "dmenu lists items vertically, with the given number of lines")
 	flag.IntVar(&monitor, "m", 0, "dmenu  is  displayed  on the monitor number supplied. Monitor numbers are starting from 0")
 	flag.StringVar(&prompt, "p", "", "defines the prompt to be displayed to the left of the input field")
-	flag.StringVar(&font, "fn", "", "defines the font or font set used")
+	flag.StringVar(&fontPath, "fn", "", "defines the font or font set used")
 	flag.StringVar(&normBackg, "nb", "", "defines the normal background color. #RGB, #RRGGBB, and X color names are supported")
 	flag.StringVar(&normForeg, "nf", "", "defines the normal foreground color")
 	flag.StringVar(&selBackg, "sb", "", "defines the selected background color")
@@ -63,6 +78,26 @@ func init() {
 func main() {
 	flag.Parse()
 
+	// init fonts
+	if err := ttf.Init(); err != nil {
+		panic(err)
+	}
+
+	// init sdl
+	if err := sdl.Init(sdl.INIT_VIDEO); err != nil {
+		panic(err)
+	}
+
+	// default font
+	if fontPath == "" {
+		fontPath = "./assets/zpix.ttf"
+	}
+
+	// default number of lines
+	if lines == 0 {
+		lines = 4
+	}
+
 	if help {
 		flag.VisitAll(func(flag *flag.Flag) {
 			format := "\t-%s: %s (Default: '%s')\n"
@@ -70,45 +105,125 @@ func main() {
 		})
 	}
 
-	display, _ = draw.Init(nil, "", "test", "")
-	keyboard = display.InitKeyboard()
-	mouse = display.InitMouse()
+	inputChan := make(chan string)
+	input := make([]string, inputDefaultSize)
 
+	go readInput(inputChan)
+
+	numOfInput := 0
+	for s := range inputChan {
+		if numOfInput+1 >= len(input) {
+			input = append(input, make([]string, int(float64(cap(input))*defaultGrowthSize))...)
+		}
+		input[numOfInput] = s
+		numOfInput += 1
+	}
+
+	menu, err := setUpMenu(input, numOfInput)
+	if err != nil {
+		panic(err)
+	}
+
+	err = menu.writeItem()
+	if err != nil {
+		panic(err)
+	}
+
+	menu.cleanUp()
+}
+
+func readInput(c chan string) {
 	scanner := bufio.NewScanner(os.Stdin)
-	const inputDefaultSize = 4098
-	input := make([]byte, inputDefaultSize)
 
 	// store stdin into 'input' slice
 	for scanner.Scan() {
-		input = append(input, scanner.Bytes()...)
-		input = append(input, '\n')
+		c <- scanner.Text()
 	}
 
 	if err := scanner.Err(); err != nil {
 		fmt.Fprintln(os.Stderr, "reading err: ", err)
 	}
 
-	screen := display.Image
-	o := screen.R.Min
-	pad := 20
-	size := 100
-	display.Top()
+	close(c)
+}
 
-	screen.Draw(draw.Rect(o.X+pad, o.Y+pad, o.X+pad+size, o.Y+pad+size), display.Black, nil, image.ZP)
-	screen.String(draw.Pt(o.X+pad, o.Y+pad+size), display.Black, image.ZP, display.Font, "draw")
+func setUpMenu(input []string, numOfInput int) (*Menu, error) {
+	var err error
+	var text *sdl.Surface
 
-	screen.Ellipse(draw.Pt(o.X+pad+size*2, o.Y+pad+size/2), size/2, size/2, 1, display.Black, image.ZP)
-	screen.String(draw.Pt(o.X+pad+size, o.Y+pad+size), display.Black, image.ZP, display.Font, "fillellipse")
+	m := Menu{window: nil, surface: nil, font: nil, itemList: make([]Item, numOfInput)}
 
-	screen.FillArc(draw.Pt(o.X+pad+size*4, o.Y+pad+size), size, size, display.Black, image.ZP, 0, 90)
-	screen.String(draw.Pt(o.X+pad+size*4, o.Y+pad+size), display.Black, image.ZP, display.Font, "fillarc")
-
-	for {
-		mouseEvent := mouse.Read()
-		if mouseEvent.Buttons == 4 {
-			break
-		}
+	// create window
+	m.window, err = sdl.CreateWindow("go-menu", sdl.WINDOWPOS_UNDEFINED, sdl.WINDOWPOS_UNDEFINED, 800, 600, sdl.WINDOW_SHOWN)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to create window: %s\n", err)
+		return nil, err
 	}
 
-	fmt.Printf("%s", input)
+	// get surface
+	if m.surface, err = m.window.GetSurface(); err != nil {
+		return nil, err
+	}
+
+	// get font
+	if m.font, err = ttf.OpenFont(fontPath, fontSize); err != nil {
+		return nil, err
+	}
+
+	// get text
+	for i := 0; i < numOfInput; i++ {
+		text, err = m.font.RenderUTF8Blended(input[i], sdl.Color{R: 255, G: 0, B: 0, A: 255})
+		if err != nil {
+			panic(err)
+		}
+
+		if i+1 >= len(m.itemList) {
+			m.itemList = append(m.itemList, make([]Item, int(float64(cap(m.itemList))*defaultGrowthSize))...)
+		}
+
+		m.itemList[i] = Item{renderedText: text, text: input[i]}
+	}
+
+	return &m, nil
+}
+
+func (m *Menu) writeItem() (err error) {
+	// TODO: too lazy rn but do sum math
+	if err = m.itemList[0].renderedText.Blit(nil, m.surface, &sdl.Rect{X: 400 - (m.itemList[0].renderedText.W / 2), Y: 300 - (m.itemList[0].renderedText.H / 2), W: 0, H: 0}); err != nil {
+		return
+	}
+	m.window.UpdateSurface()
+
+	running := true
+	for running {
+		for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
+			switch event.(type) {
+			case *sdl.QuitEvent:
+				running = false
+			}
+		}
+
+		sdl.Delay(16)
+	}
+
+	return
+}
+
+func (m *Menu) cleanUp() {
+	ttf.Quit()
+	sdl.Quit()
+
+	if m.window != nil {
+		defer m.window.Destroy()
+	}
+
+	if m.font != nil {
+		defer m.font.Close()
+	}
+
+	for i := range m.itemList {
+		defer m.itemList[i].renderedText.Free()
+	}
+
+	os.Exit(0)
 }

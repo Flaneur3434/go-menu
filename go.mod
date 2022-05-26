@@ -2,4 +2,4 @@ module github.com/Flaneur3434/go-menu
 
 go 1.18
 
-require 9fans.net/go v0.0.4
+require github.com/veandco/go-sdl2 v0.4.21
