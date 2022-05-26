@@ -42,10 +42,11 @@ var (
 )
 
 type Menu struct {
-	window   *sdl.Window
-	surface  *sdl.Surface
-	font     *ttf.Font
-	itemList []Item
+	window     *sdl.Window
+	surface    *sdl.Surface
+	font       *ttf.Font
+	numOfItems int
+	itemList   []Item
 }
 
 type Item struct {
@@ -129,6 +130,18 @@ func main() {
 		panic(err)
 	}
 
+	running := true
+	for running {
+		for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
+			switch event.(type) {
+			case *sdl.QuitEvent:
+				running = false
+			}
+		}
+
+		sdl.Delay(16)
+	}
+
 	menu.cleanUp()
 }
 
@@ -147,14 +160,14 @@ func readInput(c chan string) {
 	close(c)
 }
 
-func setUpMenu(input []string, numOfInput int) (*Menu, error) {
+func setUpMenu(input []string, numOfItems int) (*Menu, error) {
 	var err error
 	var text *sdl.Surface
 
-	m := Menu{window: nil, surface: nil, font: nil, itemList: make([]Item, numOfInput)}
+	m := Menu{window: nil, surface: nil, font: nil, numOfItems: numOfItems, itemList: make([]Item, numOfItems)}
 
 	// create window
-	m.window, err = sdl.CreateWindow("go-menu", sdl.WINDOWPOS_UNDEFINED, sdl.WINDOWPOS_UNDEFINED, 800, 600, sdl.WINDOW_SHOWN)
+	m.window, err = sdl.CreateWindow("go-menu", sdl.WINDOWPOS_UNDEFINED, sdl.WINDOWPOS_UNDEFINED, 640, 480, sdl.WINDOW_SHOWN|sdl.WINDOW_BORDERLESS)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to create window: %s\n", err)
 		return nil, err
@@ -171,10 +184,10 @@ func setUpMenu(input []string, numOfInput int) (*Menu, error) {
 	}
 
 	// get text
-	for i := 0; i < numOfInput; i++ {
+	for i := 0; i < numOfItems; i++ {
 		text, err = m.font.RenderUTF8Blended(input[i], sdl.Color{R: 255, G: 0, B: 0, A: 255})
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
 
 		if i+1 >= len(m.itemList) {
@@ -188,23 +201,13 @@ func setUpMenu(input []string, numOfInput int) (*Menu, error) {
 }
 
 func (m *Menu) writeItem() (err error) {
-	// TODO: too lazy rn but do sum math
-	if err = m.itemList[0].renderedText.Blit(nil, m.surface, &sdl.Rect{X: 400 - (m.itemList[0].renderedText.W / 2), Y: 300 - (m.itemList[0].renderedText.H / 2), W: 0, H: 0}); err != nil {
-		return
-	}
-	m.window.UpdateSurface()
-
-	running := true
-	for running {
-		for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
-			switch event.(type) {
-			case *sdl.QuitEvent:
-				running = false
-			}
+	for i := 0; i < m.numOfItems && i < int(m.surface.H/fontSize); i++ {
+		if err = m.itemList[i].renderedText.Blit(nil, m.surface, &sdl.Rect{X: 1, Y: 1 + int32((i * fontSize)), W: 0, H: 0}); err != nil {
+			return
 		}
-
-		sdl.Delay(16)
 	}
+
+	m.window.UpdateSurface()
 
 	return
 }
