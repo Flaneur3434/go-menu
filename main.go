@@ -18,6 +18,8 @@ const (
 	fontSize                  = 16
 	inputDefaultSize          = 10
 	defaultGrowthSize float64 = 1.2
+	defaultWinSizeH           = 480
+	defaultWinSizeW           = 640
 )
 
 var (
@@ -46,12 +48,8 @@ type Menu struct {
 	surface    *sdl.Surface
 	font       *ttf.Font
 	numOfItems int
-	itemList   []Item
-}
-
-type Item struct {
-	renderedText *sdl.Surface
-	text         string
+	numOfRows  int
+	itemList   []string
 }
 
 func init() {
@@ -107,9 +105,18 @@ func main() {
 	}
 
 	inputChan := make(chan string)
+	menuChan := make(chan *Menu)
+	errChan := make(chan error)
 	input := make([]string, inputDefaultSize)
+	var menu *Menu
 
+	go setUpMenu(menuChan, errChan)
 	go readInput(inputChan)
+
+	menu = <-menuChan
+	if err := <-errChan; err != nil {
+		panic(err)
+	}
 
 	numOfInput := 0
 	for s := range inputChan {
@@ -119,26 +126,24 @@ func main() {
 		input[numOfInput] = s
 		numOfInput += 1
 	}
+	menu.numOfItems = numOfInput
+	menu.itemList = input
 
-	menu, err := setUpMenu(input, numOfInput)
-	if err != nil {
+	if err := menu.writeItem(); err != nil {
 		panic(err)
 	}
 
-	err = menu.writeItem()
-	if err != nil {
-		panic(err)
-	}
-
+	// main loop
 	running := true
 	for running {
 		for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
-			switch event.(type) {
+			switch t := event.(type) {
 			case *sdl.QuitEvent:
 				running = false
+			case *sdl.KeyboardEvent:
+				readKey(t)
 			}
 		}
-
 		sdl.Delay(16)
 	}
 
@@ -160,55 +165,63 @@ func readInput(c chan string) {
 	close(c)
 }
 
-func setUpMenu(input []string, numOfItems int) (*Menu, error) {
+func setUpMenu(menuChan chan *Menu, errChan chan error) {
+	m := Menu{window: nil, surface: nil, font: nil, numOfItems: 0, numOfRows: int(defaultWinSizeH / fontSize), itemList: nil}
 	var err error
-	var text *sdl.Surface
-
-	m := Menu{window: nil, surface: nil, font: nil, numOfItems: numOfItems, itemList: make([]Item, numOfItems)}
 
 	// create window
-	m.window, err = sdl.CreateWindow("go-menu", sdl.WINDOWPOS_UNDEFINED, sdl.WINDOWPOS_UNDEFINED, 640, 480, sdl.WINDOW_SHOWN|sdl.WINDOW_BORDERLESS)
+	pixelHeight := int(defaultWinSizeH/fontSize)*fontSize + int(defaultWinSizeH/fontSize)
+	m.window, err = sdl.CreateWindow("go-menu", sdl.WINDOWPOS_CENTERED, sdl.WINDOWPOS_CENTERED, defaultWinSizeW, int32(pixelHeight), sdl.WINDOW_SHOWN|sdl.WINDOW_SKIP_TASKBAR)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to create window: %s\n", err)
-		return nil, err
+		menuChan <- nil
+		errChan <- err
+		return
 	}
 
 	// get surface
 	if m.surface, err = m.window.GetSurface(); err != nil {
-		return nil, err
+		menuChan <- nil
+		errChan <- err
+		return
 	}
 
 	// get font
 	if m.font, err = ttf.OpenFont(fontPath, fontSize); err != nil {
-		return nil, err
+		menuChan <- nil
+		errChan <- err
+		return
 	}
 
-	// get text
-	for i := 0; i < numOfItems; i++ {
-		text, err = m.font.RenderUTF8Blended(input[i], sdl.Color{R: 255, G: 0, B: 0, A: 255})
-		if err != nil {
-			return nil, err
-		}
-
-		if i+1 >= len(m.itemList) {
-			m.itemList = append(m.itemList, make([]Item, int(float64(cap(m.itemList))*defaultGrowthSize))...)
-		}
-
-		m.itemList[i] = Item{renderedText: text, text: input[i]}
-	}
-
-	return &m, nil
+	menuChan <- &m
+	errChan <- nil
 }
 
 func (m *Menu) writeItem() (err error) {
-	for i := 0; i < m.numOfItems && i < int(m.surface.H/fontSize); i++ {
-		if err = m.itemList[i].renderedText.Blit(nil, m.surface, &sdl.Rect{X: 1, Y: 1 + int32((i * fontSize)), W: 0, H: 0}); err != nil {
+	// get text
+	var text *sdl.Surface
+	renderTextSlice := make([]*sdl.Surface, m.numOfRows)
+
+	for i := 0; i < len(renderTextSlice); i++ {
+		text, err = m.font.RenderUTF8Blended(m.itemList[i], sdl.Color{R: 255, G: 0, B: 0, A: 255})
+		if err != nil {
+			return err
+		}
+
+		renderTextSlice[i] = text
+	}
+
+	for i := 0; i < len(renderTextSlice); i++ {
+		if err = renderTextSlice[i].Blit(nil, m.surface, &sdl.Rect{X: 1, Y: 1 + int32((i * fontSize)), W: 0, H: 0}); err != nil {
 			return
 		}
 	}
 
 	m.window.UpdateSurface()
 
+	for _, sur := range renderTextSlice {
+		defer sur.Free()
+	}
 	return
 }
 
@@ -224,9 +237,59 @@ func (m *Menu) cleanUp() {
 		defer m.font.Close()
 	}
 
-	for i := range m.itemList {
-		defer m.itemList[i].renderedText.Free()
+	os.Exit(0)
+}
+
+func readKey(keyPress *sdl.KeyboardEvent) {
+	keyCode := keyPress.Keysym.Sym
+	keys := ""
+
+	// Modifier keys
+	switch keyPress.Keysym.Mod {
+	case sdl.KMOD_LALT:
+		keys += "Left Alt"
+	case sdl.KMOD_LCTRL:
+		keys += "Left Control"
+	case sdl.KMOD_LSHIFT:
+		keys += "Left Shift"
+	case sdl.KMOD_LGUI:
+		keys += "Left Meta or Windows key"
+	case sdl.KMOD_RALT:
+		keys += "Right Alt"
+	case sdl.KMOD_RCTRL:
+		keys += "Right Control"
+	case sdl.KMOD_RSHIFT:
+		keys += "Right Shift"
+	case sdl.KMOD_RGUI:
+		keys += "Right Meta or Windows key"
+	case sdl.KMOD_NUM:
+		keys += "Num Lock"
+	case sdl.KMOD_CAPS:
+		keys += "Caps Lock"
+	case sdl.KMOD_MODE:
+		keys += "AltGr Key"
 	}
 
-	os.Exit(0)
+	if keyCode < 10000 {
+		if keys != "" {
+			keys += " + "
+		}
+
+		// If the key is held down, this will fire
+		if keyPress.Repeat > 0 {
+			keys += string(keyCode) + " repeating"
+		} else {
+			switch keyPress.State {
+			case sdl.RELEASED:
+				keys += string(keyCode) + " released"
+			case sdl.PRESSED:
+				keys += string(keyCode) + " pressed"
+			}
+		}
+
+	}
+
+	if keys != "" {
+		fmt.Println(keys)
+	}
 }
