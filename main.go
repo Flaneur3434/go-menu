@@ -1,11 +1,10 @@
 package main
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
-	"os"
-
+	"github.com/Flaneur3434/go-menu/draw"
+	"github.com/Flaneur3434/go-menu/util"
 	"github.com/veandco/go-sdl2/sdl"
 	"github.com/veandco/go-sdl2/ttf"
 )
@@ -15,11 +14,8 @@ import (
 //       [-shf color] [-w windowid]
 
 const (
-	fontSize                  = 16
 	inputDefaultSize          = 10
 	defaultGrowthSize float64 = 1.2
-	defaultWinSizeH           = 480
-	defaultWinSizeW           = 640
 )
 
 var (
@@ -42,15 +38,6 @@ var (
 	windowId        string
 	help            bool
 )
-
-type Menu struct {
-	window        *sdl.Window
-	surface       *sdl.Surface
-	font          *ttf.Font
-	numOfRows     int
-	itemList      []string
-	keyBoardInput string
-}
 
 func init() {
 	flag.BoolVar(&bottom, "b", false, "dmenu appears at the bottom of the screen")
@@ -105,14 +92,14 @@ func main() {
 	}
 
 	stdInChan := make(chan string)
-	menuChan := make(chan *Menu)
+	menuChan := make(chan *draw.Menu)
 	errChan := make(chan error)
 
 	input := make([]string, 0, inputDefaultSize)
-	var menu *Menu
+	var menu *draw.Menu
 
-	go setUpMenu(menuChan, errChan)
-	go readStdIn(stdInChan)
+	go draw.SetUpMenu(fontPath, menuChan, errChan)
+	go util.ReadStdIn(stdInChan)
 
 	for s := range stdInChan {
 		if len(input) == cap(input) {
@@ -126,9 +113,9 @@ func main() {
 		panic(err)
 	}
 
-	menu.itemList = input
+	menu.ItemList = input
 
-	if err := menu.writeItem(); err != nil {
+	if err := menu.WriteItem(); err != nil {
 		panic(err)
 	}
 
@@ -140,129 +127,13 @@ func main() {
 			case *sdl.QuitEvent:
 				running = false
 			case *sdl.KeyboardEvent:
-				menu.readKey(t)
+				menu.ReadKey(t)
 			}
 		}
-		menu.writeItem()
+
+		menu.WriteItem()
 		sdl.Delay(50)
 	}
 
-	menu.cleanUp()
-}
-
-func readStdIn(c chan string) {
-	scanner := bufio.NewScanner(os.Stdin)
-
-	// store stdin into 'input' slice
-	for scanner.Scan() {
-		c <- scanner.Text()
-	}
-
-	if err := scanner.Err(); err != nil {
-		fmt.Fprintln(os.Stderr, "reading err: ", err)
-	}
-
-	close(c)
-}
-
-func setUpMenu(menuChan chan *Menu, errChan chan error) {
-	m := Menu{window: nil, surface: nil, font: nil, numOfRows: int(defaultWinSizeH / fontSize), itemList: nil}
-	var err error
-
-	// create window
-	pixelHeight := int(defaultWinSizeH/fontSize)*fontSize + int(defaultWinSizeH/fontSize) + fontSize
-	m.window, err = sdl.CreateWindow("go-menu", sdl.WINDOWPOS_CENTERED, sdl.WINDOWPOS_CENTERED, defaultWinSizeW, int32(pixelHeight), sdl.WINDOW_SHOWN|sdl.WINDOW_SKIP_TASKBAR)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to create window: %s\n", err)
-		menuChan <- nil
-		errChan <- err
-		return
-	}
-
-	// get surface
-	if m.surface, err = m.window.GetSurface(); err != nil {
-		menuChan <- nil
-		errChan <- err
-		return
-	}
-
-	// get font
-	if m.font, err = ttf.OpenFont(fontPath, fontSize); err != nil {
-		menuChan <- nil
-		errChan <- err
-		return
-	}
-
-	menuChan <- &m
-	errChan <- nil
-}
-
-func (m *Menu) writeItem() (err error) {
-	// get text
-	var text *sdl.Surface
-	renderTextSlice := make([]*sdl.Surface, len(m.itemList))
-	var numOfItemsToDraw int
-	if m.numOfRows <= len(renderTextSlice) {
-		numOfItemsToDraw = m.numOfRows
-	} else {
-		numOfItemsToDraw = len(renderTextSlice)
-	}
-
-	// render stdin input
-	for i := 0; i < numOfItemsToDraw; i++ {
-		text, err = m.font.RenderUTF8Blended(m.itemList[i], sdl.Color{R: 255, G: 0, B: 0, A: 255})
-		if err != nil {
-			return
-		}
-
-		renderTextSlice[i] = text
-	}
-
-	// draw stdin input
-	for i := 0; i < numOfItemsToDraw; i++ {
-		if err = renderTextSlice[i].Blit(nil, m.surface, &sdl.Rect{X: 1, Y: 1 + int32((i * fontSize)), W: 0, H: 0}); err != nil {
-			return
-		}
-	}
-
-	if len(m.keyBoardInput) > 0 {
-		// render keyboard input
-		text, err = m.font.RenderUTF8Blended(m.keyBoardInput, sdl.Color{R: 0, G: 255, B: 0, A: 255})
-		if err != nil {
-			return
-		}
-		// draw keyboard input
-		err = text.Blit(nil, m.surface, &sdl.Rect{X: 1, Y: (defaultWinSizeH/fontSize)*fontSize + defaultWinSizeH/fontSize, W: 0, H: 0})
-		if err != nil {
-			return
-		}
-	}
-
-	m.window.UpdateSurface()
-
-	for _, sur := range renderTextSlice {
-		defer sur.Free()
-	}
-	return
-}
-
-func (m *Menu) cleanUp() {
-	ttf.Quit()
-	sdl.Quit()
-
-	if m.window != nil {
-		defer m.window.Destroy()
-	}
-
-	if m.font != nil {
-		defer m.font.Close()
-	}
-
-	os.Exit(0)
-}
-
-func (m *Menu) readKey(key *sdl.KeyboardEvent) {
-	if key.Keysym.Mod == 0 && key.State == sdl.RELEASED {
-		m.keyBoardInput += string(key.Keysym.Sym)
-	}
+	menu.CleanUp()
 }
