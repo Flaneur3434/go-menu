@@ -3,12 +3,13 @@ package util
 import (
 	"bufio"
 	"fmt"
+	"math"
 	"os"
 )
 
 type Rank struct {
 	Word     string
-	distance int
+	distance float64
 }
 
 type Ranks []Rank
@@ -36,39 +37,32 @@ func InitRanks(s []string) (R Ranks) {
 	return
 }
 
-func levenshtein(s1 string, s2 string) int {
-	r1 := []rune(s1)
-	r2 := []rune(s2)
+// TODO: this is really slow, need to parallelism somehow
+func match(s, t string) float64 {
+	sidx, eidx := -1, -1
 
-	column := make([]int, 1, 64)
-
-	for y := 1; y <= len(r1); y++ {
-		column = append(column, y)
-	}
-
-	for x := 1; x <= len(r2); x++ {
-		column[0] = x
-
-		for y, lastDiag := 1, x-1; y <= len(r1); y++ {
-			oldDiag := column[y]
-			cost := 0
-			if r1[y-1] != r2[x-1] {
-				cost = 1
+	for i, j := 0, 0; i < len(t); i++ {
+		if string(s[j]) == string(t[i]) {
+			if sidx == -1 {
+				sidx = i
 			}
-			column[y] = min(column[y]+1, column[y-1]+1, lastDiag+cost)
-			lastDiag = oldDiag
+			j++
+			if j == len(s) {
+				eidx = i
+				break
+			}
 		}
 	}
-	return column[len(r1)]
-}
 
-func min(a, b, c int) int {
-	if a < b && a < c {
-		return a
-	} else if b < c {
-		return b
+	// pattern s was contained in string t
+	if eidx != -1 {
+		/* compute distance */
+		/* add penalty if match starts late (log(sidx+2))
+		 * add penalty for long a match without many matching characters */
+		return math.Log(float64(sidx)+2) + float64(eidx-sidx-len(s))
+	} else {
+		return 100
 	}
-	return c
 }
 
 func (R Ranks) FuzzySearch(target string) {
@@ -77,7 +71,7 @@ func (R Ranks) FuzzySearch(target string) {
 	}
 
 	for i := range R {
-		R[i].distance = levenshtein(target, R[i].Word)
+		R[i].distance = match(target, R[i].Word)
 	}
 }
 

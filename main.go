@@ -8,7 +8,6 @@ import (
 	"github.com/veandco/go-sdl2/sdl"
 	"github.com/veandco/go-sdl2/ttf"
 	"sort"
-	"sync"
 )
 
 //  dmenu  [-bfiv]  [-l  lines]  [-m monitor] [-p prompt] [-fn font] [-nb color]
@@ -124,7 +123,6 @@ func main() {
 
 	// main loop
 	running := true
-	var wg sync.WaitGroup
 	for running {
 		event := sdl.PollEvent()
 		switch t := event.(type) {
@@ -132,20 +130,12 @@ func main() {
 			running = false
 		case *sdl.KeyboardEvent:
 			menu.ReadKey(t, &running)
-			wg.Add(2)
-			go func() {
-				fuzzList.FuzzySearch(menu.KeyBoardInput)
-				defer wg.Done()
-			}()
-			go func() {
-				sort.Sort(fuzzList)
-				defer wg.Done()
-			}()
-			wg.Wait()
+			fuzzList.FuzzySearch(menu.KeyBoardInput)
+			sort.Sort(fuzzList)
 			menu.WriteItem(fuzzList)
 		}
 
-		sdl.Delay(20)
+		sdl.Delay(5)
 	}
 
 	// TODO: os.stdout the selected item
