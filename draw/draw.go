@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/Flaneur3434/go-menu/util"
 	"github.com/veandco/go-sdl2/sdl"
 	"github.com/veandco/go-sdl2/ttf"
 )
@@ -16,11 +17,12 @@ const (
 
 type Menu struct {
 	window        *sdl.Window
+	renderer      *sdl.Renderer
 	surface       *sdl.Surface
 	font          *ttf.Font
 	numOfRows     int
 	ItemList      []string
-	keyBoardInput string
+	KeyBoardInput string
 }
 
 func SetUpMenu(fontPath string, menuChan chan *Menu, errChan chan error) {
@@ -32,6 +34,15 @@ func SetUpMenu(fontPath string, menuChan chan *Menu, errChan chan error) {
 	m.window, err = sdl.CreateWindow("go-menu", sdl.WINDOWPOS_CENTERED, sdl.WINDOWPOS_CENTERED, defaultWinSizeW, int32(pixelHeight), sdl.WINDOW_SHOWN|sdl.WINDOW_SKIP_TASKBAR)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to create window: %s\n", err)
+		menuChan <- nil
+		errChan <- err
+		return
+	}
+
+	// create renderer
+	m.renderer, err = sdl.CreateRenderer(m.window, -1, sdl.RENDERER_ACCELERATED)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to create renderer: %s\n", err)
 		menuChan <- nil
 		errChan <- err
 		return
@@ -55,7 +66,7 @@ func SetUpMenu(fontPath string, menuChan chan *Menu, errChan chan error) {
 	errChan <- nil
 }
 
-func (m *Menu) WriteItem() error {
+func (m *Menu) WriteItem(R util.Ranks) error {
 	renderTextSlice := make([]*sdl.Surface, len(m.ItemList))
 	var numOfItemsToDraw int
 	if m.numOfRows <= len(renderTextSlice) {
@@ -64,9 +75,13 @@ func (m *Menu) WriteItem() error {
 		numOfItemsToDraw = len(renderTextSlice)
 	}
 
+	// clear clear of any artifacts
+	m.renderer.Clear()
+	m.surface.FillRect(&sdl.Rect{0, 0, defaultWinSizeW, defaultWinSizeH}, 0)
+
 	// render stdin input
 	for i := 0; i < numOfItemsToDraw; i++ {
-		text, err := m.font.RenderUTF8Blended(m.ItemList[i], sdl.Color{R: 255, G: 0, B: 0, A: 255})
+		text, err := m.font.RenderUTF8Blended(R[i].Word, sdl.Color{R: 255, G: 0, B: 0, A: 255})
 		if err != nil {
 			return err
 		}
@@ -85,9 +100,9 @@ func (m *Menu) WriteItem() error {
 		defer sur.Free()
 	}
 
-	if len(m.keyBoardInput) > 0 {
+	if len(m.KeyBoardInput) > 0 {
 		// render keyboard input
-		text, err := m.font.RenderUTF8Blended(m.keyBoardInput, sdl.Color{R: 0, G: 255, B: 0, A: 255})
+		text, err := m.font.RenderUTF8Blended(m.KeyBoardInput, sdl.Color{R: 0, G: 255, B: 0, A: 255})
 		if err != nil {
 			return err
 		}
@@ -106,10 +121,14 @@ func (m *Menu) WriteItem() error {
 	return nil
 }
 
-func (m *Menu) ReadKey(key *sdl.KeyboardEvent) {
+func (m *Menu) ReadKey(key *sdl.KeyboardEvent, runningChan *bool) {
+	// TODO: unicode support
+	// TODO: if enter is pressing *runningChan = false
 	if key.Keysym.Mod == 0 && key.State == sdl.RELEASED {
-		m.keyBoardInput += string(key.Keysym.Sym)
+		m.KeyBoardInput += string(key.Keysym.Sym)
 	}
+
+	*runningChan = true
 }
 
 func (m *Menu) CleanUp() {
@@ -118,6 +137,10 @@ func (m *Menu) CleanUp() {
 
 	if m.window != nil {
 		defer m.window.Destroy()
+	}
+
+	if m.window != nil {
+		defer m.renderer.Destroy()
 	}
 
 	if m.font != nil {

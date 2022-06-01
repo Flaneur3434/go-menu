@@ -7,6 +7,8 @@ import (
 	"github.com/Flaneur3434/go-menu/util"
 	"github.com/veandco/go-sdl2/sdl"
 	"github.com/veandco/go-sdl2/ttf"
+	"sort"
+	"sync"
 )
 
 //  dmenu  [-bfiv]  [-l  lines]  [-m monitor] [-p prompt] [-fn font] [-nb color]
@@ -114,26 +116,38 @@ func main() {
 	}
 
 	menu.ItemList = input
+	fuzzList := util.InitRanks(menu.ItemList)
 
-	if err := menu.WriteItem(); err != nil {
+	if err := menu.WriteItem(fuzzList); err != nil {
 		panic(err)
 	}
 
 	// main loop
 	running := true
+	var wg sync.WaitGroup
 	for running {
-		for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
-			switch t := event.(type) {
-			case *sdl.QuitEvent:
-				running = false
-			case *sdl.KeyboardEvent:
-				menu.ReadKey(t)
-			}
+		event := sdl.PollEvent()
+		switch t := event.(type) {
+		case *sdl.QuitEvent:
+			running = false
+		case *sdl.KeyboardEvent:
+			menu.ReadKey(t, &running)
+			wg.Add(2)
+			go func() {
+				fuzzList.FuzzySearch(menu.KeyBoardInput)
+				defer wg.Done()
+			}()
+			go func() {
+				sort.Sort(fuzzList)
+				defer wg.Done()
+			}()
+			wg.Wait()
+			menu.WriteItem(fuzzList)
 		}
 
-		menu.WriteItem()
-		sdl.Delay(50)
+		sdl.Delay(20)
 	}
 
+	// TODO: os.stdout the selected item
 	menu.CleanUp()
 }
