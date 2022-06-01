@@ -3,11 +3,12 @@ package main
 import (
 	"flag"
 	"fmt"
+	"sort"
+
 	"github.com/Flaneur3434/go-menu/draw"
 	"github.com/Flaneur3434/go-menu/util"
 	"github.com/veandco/go-sdl2/sdl"
 	"github.com/veandco/go-sdl2/ttf"
-	"sort"
 )
 
 //  dmenu  [-bfiv]  [-l  lines]  [-m monitor] [-p prompt] [-fn font] [-nb color]
@@ -130,12 +131,11 @@ func main() {
 			running = false
 		case *sdl.KeyboardEvent:
 			menu.ReadKey(t, &running)
-			fuzzList.FuzzySearch(menu.KeyBoardInput)
+			util.FuzzySearch(&fuzzList, menu.KeyBoardInput)
 			sort.Sort(fuzzList)
 			menu.WriteItem(fuzzList)
+			sdl.Delay(5)
 		}
-
-		sdl.Delay(5)
 	}
 
 	// TODO: os.stdout the selected item

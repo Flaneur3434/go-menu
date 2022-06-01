@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"sort"
 )
 
 type Rank struct {
-	Word     string
-	distance float64
+	Word string
+	rank float64
 }
 
 type Ranks []Rank
@@ -31,7 +32,7 @@ func ReadStdIn(c chan string) {
 
 func InitRanks(s []string) (R Ranks) {
 	for i := range s {
-		R = append(R, Rank{Word: s[i], distance: -1})
+		R = append(R, Rank{Word: s[i], rank: -1})
 	}
 
 	return
@@ -56,7 +57,7 @@ func match(s, t string) float64 {
 
 	// pattern s was contained in string t
 	if eidx != -1 {
-		/* compute distance */
+		/* compute rank */
 		/* add penalty if match starts late (log(sidx+2))
 		 * add penalty for long a match without many matching characters */
 		return math.Log(float64(sidx)+2) + float64(eidx-sidx-len(s))
@@ -65,14 +66,43 @@ func match(s, t string) float64 {
 	}
 }
 
-func (R Ranks) FuzzySearch(target string) {
+func FuzzySearch(R *Ranks, target string) {
 	if len(target) < 1 {
 		return
 	}
 
-	for i := range R {
-		R[i].distance = match(target, R[i].Word)
+	numOfThreads := 30
+	chunks := int(len(*R) / numOfThreads)
+	tailcaseChunk := len(*R) % numOfThreads
+	out := make(chan Ranks)
+
+	for i := 0; i < numOfThreads; i++ {
+		go func(idx int, in chan Ranks) {
+			var rankSlice Ranks
+			for idx, j := 0, idx*chunks; idx < chunks; {
+				rankSlice = append(rankSlice, Rank{Word: (*R)[j].Word, rank: match(target, (*R)[j].Word)})
+				idx++
+				j++
+			}
+
+			sort.Sort(rankSlice)
+			in <- rankSlice
+		}(i, out)
 	}
+
+	finalRanks := make(Ranks, 0, len(*R))
+	for len(finalRanks) != chunks*numOfThreads {
+		finalRanks = append(finalRanks, <-out...)
+	}
+
+	for i := 0; i < tailcaseChunk; i++ {
+		idx := i + chunks*numOfThreads
+		finalRanks = append(finalRanks, Rank{Word: (*R)[idx].Word, rank: match(target, (*R)[idx].Word)})
+		idx++
+	}
+
+	// why? because of thread thrashing (probably)
+	*R = finalRanks
 }
 
 func (R Ranks) Len() int {
@@ -80,7 +110,7 @@ func (R Ranks) Len() int {
 }
 
 func (R Ranks) Less(i, j int) bool {
-	return R[i].distance < R[j].distance
+	return R[i].rank < R[j].rank
 }
 
 func (R Ranks) Swap(i, j int) {
