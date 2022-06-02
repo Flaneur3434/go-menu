@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"sort"
 
 	"github.com/Flaneur3434/go-menu/draw"
 	"github.com/Flaneur3434/go-menu/util"
@@ -96,6 +95,8 @@ func main() {
 	stdInChan := make(chan string)
 	menuChan := make(chan *draw.Menu)
 	errChan := make(chan error)
+	keyBoardChan := make(chan string)
+	ranksChan := make(chan util.Ranks)
 
 	input := make([]string, 0, inputDefaultSize)
 	var menu *draw.Menu
@@ -122,6 +123,10 @@ func main() {
 		panic(err)
 	}
 
+	if err := menu.WriteKeyBoard(); err != nil {
+		panic(err)
+	}
+
 	// main loop
 	running := true
 	for running {
@@ -130,12 +135,28 @@ func main() {
 		case *sdl.QuitEvent:
 			running = false
 		case *sdl.KeyboardEvent:
-			menu.ReadKey(t, &running)
-			util.FuzzySearch(&fuzzList, menu.KeyBoardInput)
-			sort.Sort(fuzzList)
-			menu.WriteItem(fuzzList)
-			sdl.Delay(5)
+			go func() {
+				// TODO: unicode support
+				if t.Keysym.Mod == 0 && t.State == sdl.RELEASED {
+					menu.KeyBoardInput += string(t.Keysym.Sym)
+				}
+				keyBoardChan <- menu.KeyBoardInput
+			}()
+
+			go func() {
+				util.FuzzySearch(&fuzzList, <-keyBoardChan)
+				ranksChan <- fuzzList
+			}()
+
+			select {
+			case ranks := <-ranksChan:
+				menu.WriteItem(ranks)
+				menu.WriteKeyBoard()
+			default:
+				menu.WriteKeyBoard()
+			}
 		}
+		sdl.Delay(5)
 	}
 
 	// TODO: os.stdout the selected item

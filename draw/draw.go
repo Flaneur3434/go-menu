@@ -77,7 +77,7 @@ func (m *Menu) WriteItem(R util.Ranks) error {
 
 	// clear clear of any artifacts
 	m.renderer.Clear()
-	m.surface.FillRect(&sdl.Rect{0, 0, defaultWinSizeW, defaultWinSizeH}, 0)
+	m.surface.FillRect(&sdl.Rect{X: 0, Y: 0, W: defaultWinSizeW, H: defaultWinSizeH}, 0)
 
 	// render stdin input
 	for i := 0; i < numOfItemsToDraw; i++ {
@@ -100,6 +100,17 @@ func (m *Menu) WriteItem(R util.Ranks) error {
 		defer sur.Free()
 	}
 
+	m.window.UpdateSurface()
+
+	return nil
+}
+
+// name ...
+func (m *Menu) WriteKeyBoard() error {
+	// clear clear of any artifacts
+	m.renderer.Clear()
+	m.surface.FillRect(&sdl.Rect{X: 1, Y: (defaultWinSizeH/fontSize)*fontSize + defaultWinSizeH/fontSize, W: 0, H: 0}, 0)
+
 	if len(m.KeyBoardInput) > 0 {
 		// render keyboard input
 		text, err := m.font.RenderUTF8Blended(m.KeyBoardInput, sdl.Color{R: 0, G: 255, B: 0, A: 255})
@@ -119,16 +130,6 @@ func (m *Menu) WriteItem(R util.Ranks) error {
 	m.window.UpdateSurface()
 
 	return nil
-}
-
-func (m *Menu) ReadKey(key *sdl.KeyboardEvent, runningChan *bool) {
-	// TODO: unicode support
-	// TODO: if enter is pressing *runningChan = false
-	if key.Keysym.Mod == 0 && key.State == sdl.RELEASED {
-		m.KeyBoardInput += string(key.Keysym.Sym)
-	}
-
-	*runningChan = true
 }
 
 func (m *Menu) CleanUp() {

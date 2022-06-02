@@ -38,7 +38,6 @@ func InitRanks(s []string) (R Ranks) {
 	return
 }
 
-// TODO: this is really slow, need to parallelism somehow
 func match(s, t string) float64 {
 	sidx, eidx := -1, -1
 
@@ -62,7 +61,7 @@ func match(s, t string) float64 {
 		 * add penalty for long a match without many matching characters */
 		return math.Log(float64(sidx)+2) + float64(eidx-sidx-len(s))
 	} else {
-		return 100
+		return math.MaxFloat64
 	}
 }
 
@@ -100,6 +99,8 @@ func FuzzySearch(R *Ranks, target string) {
 		finalRanks = append(finalRanks, Rank{Word: (*R)[idx].Word, rank: match(target, (*R)[idx].Word)})
 		idx++
 	}
+
+	sort.Sort(finalRanks)
 
 	// why? because of thread thrashing (probably)
 	*R = finalRanks
