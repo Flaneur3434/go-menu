@@ -137,8 +137,15 @@ func main() {
 		case *sdl.KeyboardEvent:
 			go func() {
 				// TODO: unicode support
-				if t.Keysym.Mod == 0 && t.State == sdl.RELEASED {
-					menu.KeyBoardInput += string(t.Keysym.Sym)
+				if t.State == sdl.RELEASED {
+					switch t.Keysym.Sym {
+					case 8:
+						if len(menu.KeyBoardInput) > 0 {
+							menu.KeyBoardInput = menu.KeyBoardInput[:len(menu.KeyBoardInput)-1]
+						}
+					default:
+						menu.KeyBoardInput += string(t.Keysym.Sym)
+					}
 				}
 				keyBoardChan <- menu.KeyBoardInput
 			}()
@@ -156,7 +163,7 @@ func main() {
 				menu.WriteKeyBoard()
 			}
 		}
-		sdl.Delay(5)
+		sdl.Delay(3)
 	}
 
 	// TODO: os.stdout the selected item

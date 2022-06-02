@@ -109,7 +109,7 @@ func (m *Menu) WriteItem(R util.Ranks) error {
 func (m *Menu) WriteKeyBoard() error {
 	// clear clear of any artifacts
 	m.renderer.Clear()
-	m.surface.FillRect(&sdl.Rect{X: 1, Y: (defaultWinSizeH/fontSize)*fontSize + defaultWinSizeH/fontSize, W: 0, H: 0}, 0)
+	m.surface.FillRect(&sdl.Rect{X: 1, Y: (defaultWinSizeH/fontSize)*fontSize + defaultWinSizeH/fontSize, W: defaultWinSizeW, H: fontSize}, 0)
 
 	if len(m.KeyBoardInput) > 0 {
 		// render keyboard input
