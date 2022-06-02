@@ -163,9 +163,15 @@ func main() {
 				menu.WriteKeyBoard()
 			}
 		}
+
 		sdl.Delay(3)
 	}
 
-	// TODO: os.stdout the selected item
 	menu.CleanUp()
 }
+
+/*
+ * TODO: Select and write to os.Stdout
+ * TODO: Better colors
+ * TODO: Actually parse the input
+ */

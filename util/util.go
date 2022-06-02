@@ -10,7 +10,7 @@ import (
 
 type Rank struct {
 	Word string
-	rank float64
+	Rank float64
 }
 
 type Ranks []Rank
@@ -32,7 +32,7 @@ func ReadStdIn(c chan string) {
 
 func InitRanks(s []string) (R Ranks) {
 	for i := range s {
-		R = append(R, Rank{Word: s[i], rank: -1})
+		R = append(R, Rank{Word: s[i], Rank: -1})
 	}
 
 	return
@@ -79,7 +79,7 @@ func FuzzySearch(R *Ranks, target string) {
 		go func(idx int, in chan Ranks) {
 			var rankSlice Ranks
 			for idx, j := 0, idx*chunks; idx < chunks; {
-				rankSlice = append(rankSlice, Rank{Word: (*R)[j].Word, rank: match(target, (*R)[j].Word)})
+				rankSlice = append(rankSlice, Rank{Word: (*R)[j].Word, Rank: match(target, (*R)[j].Word)})
 				idx++
 				j++
 			}
@@ -96,7 +96,7 @@ func FuzzySearch(R *Ranks, target string) {
 
 	for i := 0; i < tailcaseChunk; i++ {
 		idx := i + chunks*numOfThreads
-		finalRanks = append(finalRanks, Rank{Word: (*R)[idx].Word, rank: match(target, (*R)[idx].Word)})
+		finalRanks = append(finalRanks, Rank{Word: (*R)[idx].Word, Rank: match(target, (*R)[idx].Word)})
 		idx++
 	}
 
@@ -111,7 +111,7 @@ func (R Ranks) Len() int {
 }
 
 func (R Ranks) Less(i, j int) bool {
-	return R[i].rank < R[j].rank
+	return R[i].Rank < R[j].Rank
 }
 
 func (R Ranks) Swap(i, j int) {

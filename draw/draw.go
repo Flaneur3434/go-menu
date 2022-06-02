@@ -2,6 +2,7 @@ package draw
 
 import (
 	"fmt"
+	"math"
 	"os"
 
 	"github.com/Flaneur3434/go-menu/util"
@@ -81,12 +82,14 @@ func (m *Menu) WriteItem(R util.Ranks) error {
 
 	// render stdin input
 	for i := 0; i < numOfItemsToDraw; i++ {
-		text, err := m.font.RenderUTF8Blended(R[i].Word, sdl.Color{R: 255, G: 0, B: 0, A: 255})
-		if err != nil {
-			return err
-		}
+		if R[i].Rank != math.MaxFloat64 {
+			text, err := m.font.RenderUTF8Blended(R[i].Word, sdl.Color{R: 255, G: 0, B: 0, A: 255})
+			if err != nil {
+				return err
+			}
 
-		renderTextSlice[i] = text
+			renderTextSlice[i] = text
+		}
 	}
 
 	// draw stdin input
