@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/Flaneur3434/go-menu/util"
+	_ "github.com/veandco/go-sdl2/gfx"
 	"github.com/veandco/go-sdl2/sdl"
 	"github.com/veandco/go-sdl2/ttf"
 )
@@ -22,13 +23,29 @@ type Menu struct {
 	surface       *sdl.Surface
 	font          *ttf.Font
 	numOfRows     int
+	topItem       int
 	ItemList      []string
 	KeyBoardInput string
+
+	normBackg string
+	normForeg string
+	selBackg  string
+	selForeg  string
 }
 
-func SetUpMenu(fontPath string, menuChan chan *Menu, errChan chan error) {
-	m := Menu{window: nil, surface: nil, font: nil, numOfRows: int(defaultWinSizeH / fontSize), ItemList: nil}
+func SetUpMenu(fontPath string, menuChan chan *Menu, errChan chan error, normBackg, normForeg, selBackg, selForeg string) {
 	var err error
+	m := Menu{window: nil,
+		surface:       nil,
+		font:          nil,
+		numOfRows:     int(defaultWinSizeH / fontSize),
+		topItem:       0,
+		ItemList:      nil,
+		KeyBoardInput: "",
+		normBackg:     normBackg,
+		normForeg:     normForeg,
+		selBackg:      selBackg,
+		selForeg:      selForeg}
 
 	// create window
 	pixelHeight := int(defaultWinSizeH/fontSize)*fontSize + int(defaultWinSizeH/fontSize) + fontSize
@@ -81,13 +98,12 @@ func (m *Menu) WriteItem(R util.Ranks) error {
 	m.surface.FillRect(&sdl.Rect{X: 0, Y: 0, W: defaultWinSizeW, H: defaultWinSizeH}, 0)
 
 	// render stdin input
-	for i := 0; i < numOfItemsToDraw; i++ {
+	for i := m.topItem; i < numOfItemsToDraw; i++ {
 		if R[i].Rank != math.MaxFloat64 {
 			text, err := m.font.RenderUTF8Blended(R[i].Word, sdl.Color{R: 255, G: 0, B: 0, A: 255})
 			if err != nil {
 				return err
 			}
-
 			renderTextSlice[i] = text
 		}
 	}
@@ -108,7 +124,6 @@ func (m *Menu) WriteItem(R util.Ranks) error {
 	return nil
 }
 
-// name ...
 func (m *Menu) WriteKeyBoard() error {
 	// clear clear of any artifacts
 	m.renderer.Clear()
@@ -152,4 +167,30 @@ func (m *Menu) CleanUp() {
 	}
 
 	os.Exit(0)
+}
+
+// Move the menu down by one item
+func (m *Menu) ScrollMenuDown() {
+	if m.topItem+1 < len(m.ItemList)-m.numOfRows {
+		m.topItem++
+	}
+}
+
+// Move the menu Up by one item
+func (m *Menu) ScrollMenuUp() {
+	if m.topItem-1 >= 0 {
+		m.topItem--
+	}
+}
+
+// use gfx.ThickLineRGBA and gfx.StringRGBA to draw a thick line with the color
+// defined by selForeg and selBackg
+func (m *Menu) drawSel(posY int) (err error) {
+	return
+}
+
+// use gfx.BoxRGBA and gfx.StringRGBA to draw a thick line with the color
+// defined by normForeg and normBackg
+func (m *Menu) drawNorm() (err error) {
+	return
 }

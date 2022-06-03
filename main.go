@@ -20,44 +20,28 @@ const (
 )
 
 var (
-	bottom          bool
 	grabKeyBoard    bool
 	caseInsensitive bool
 	lines           int
-	monitor         int
 	prompt          string
 	fontPath        string
 	normBackg       string
 	normForeg       string
 	selBackg        string
 	selForeg        string
-	normHighlBack   string
-	normHighlFore   string
-	selHighlBack    string
-	selHighlFore    string
-	version         bool
-	windowId        string
 	help            bool
 )
 
 func init() {
-	flag.BoolVar(&bottom, "b", false, "dmenu appears at the bottom of the screen")
 	flag.BoolVar(&grabKeyBoard, "f", false, "dmenu  grabs  the keyboard before reading stdin if not reading from a tty. This  is  faster,  but  will  lock  up  X  until  stdin  reaches end-of-file.")
 	flag.BoolVar(&caseInsensitive, "i", false, "dmenu matches menu items case insensitively")
 	flag.IntVar(&lines, "l", 5, "dmenu lists items vertically, with the given number of lines")
-	flag.IntVar(&monitor, "m", 0, "dmenu  is  displayed  on the monitor number supplied. Monitor numbers are starting from 0")
 	flag.StringVar(&prompt, "p", "", "defines the prompt to be displayed to the left of the input field")
 	flag.StringVar(&fontPath, "fn", "", "defines the font or font set used")
 	flag.StringVar(&normBackg, "nb", "", "defines the normal background color. #RGB, #RRGGBB, and X color names are supported")
 	flag.StringVar(&normForeg, "nf", "", "defines the normal foreground color")
 	flag.StringVar(&selBackg, "sb", "", "defines the selected background color")
 	flag.StringVar(&selForeg, "sf", "", "defines the selected foreground color")
-	flag.StringVar(&normHighlBack, "nhb", "", "defines the normal highlight background color")
-	flag.StringVar(&normHighlFore, "nhf", "", "defines the normal highlight foreground color")
-	flag.StringVar(&selHighlBack, "shb", "", "defines the selected highlight background color")
-	flag.StringVar(&selHighlFore, "shf", "", "defines the selected highlight foreground color")
-	flag.BoolVar(&version, "v", false, "prints version information to stdout, then exits")
-	flag.StringVar(&windowId, "w", "", "embed into windowid")
 	flag.BoolVar(&help, "h", false, "print help message")
 	flag.BoolVar(&help, "help", false, "print help message")
 }
@@ -97,11 +81,12 @@ func main() {
 	errChan := make(chan error)
 	keyBoardChan := make(chan string)
 	ranksChan := make(chan util.Ranks)
+	updateChan := make(chan bool)
 
 	input := make([]string, 0, inputDefaultSize)
 	var menu *draw.Menu
 
-	go draw.SetUpMenu(fontPath, menuChan, errChan)
+	go draw.SetUpMenu(fontPath, menuChan, errChan, normBackg, normForeg, selBackg, selForeg)
 	go util.ReadStdIn(stdInChan)
 
 	for s := range stdInChan {
@@ -136,22 +121,32 @@ func main() {
 			running = false
 		case *sdl.KeyboardEvent:
 			go func() {
-				// TODO: unicode support
+				// TODO: unicode support, shift key
 				if t.State == sdl.RELEASED {
 					switch t.Keysym.Sym {
-					case 8:
+					case sdl.K_BACKSPACE:
 						if len(menu.KeyBoardInput) > 0 {
 							menu.KeyBoardInput = menu.KeyBoardInput[:len(menu.KeyBoardInput)-1]
+							updateChan <- true
 						}
+					case sdl.K_UP:
+						menu.ScrollMenuUp()
+					case sdl.K_DOWN:
+						menu.ScrollMenuDown()
 					default:
 						menu.KeyBoardInput += string(t.Keysym.Sym)
+						updateChan <- true
 					}
 				}
 				keyBoardChan <- menu.KeyBoardInput
 			}()
 
 			go func() {
-				util.FuzzySearch(&fuzzList, <-keyBoardChan)
+				select {
+				case <-updateChan:
+					util.FuzzySearch(&fuzzList, <-keyBoardChan)
+				default:
+				}
 				ranksChan <- fuzzList
 			}()
 
@@ -169,9 +164,3 @@ func main() {
 
 	menu.CleanUp()
 }
-
-/*
- * TODO: Select and write to os.Stdout
- * TODO: Better colors
- * TODO: Actually parse the input
- */

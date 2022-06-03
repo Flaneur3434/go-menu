@@ -8,6 +8,10 @@ import (
 	"sort"
 )
 
+const (
+	numOfThreads = 10
+)
+
 type Rank struct {
 	Word string
 	Rank float64
@@ -41,6 +45,10 @@ func InitRanks(s []string) (R Ranks) {
 func match(s, t string) float64 {
 	sidx, eidx := -1, -1
 
+	if len(s) < 1 {
+		return -1
+	}
+
 	for i, j := 0, 0; i < len(t); i++ {
 		if string(s[j]) == string(t[i]) {
 			if sidx == -1 {
@@ -66,11 +74,6 @@ func match(s, t string) float64 {
 }
 
 func FuzzySearch(R *Ranks, target string) {
-	if len(target) < 1 {
-		return
-	}
-
-	numOfThreads := 30
 	chunks := int(len(*R) / numOfThreads)
 	tailcaseChunk := len(*R) % numOfThreads
 	out := make(chan Ranks)
@@ -84,7 +87,6 @@ func FuzzySearch(R *Ranks, target string) {
 				j++
 			}
 
-			sort.Sort(rankSlice)
 			in <- rankSlice
 		}(i, out)
 	}
@@ -116,4 +118,9 @@ func (R Ranks) Less(i, j int) bool {
 
 func (R Ranks) Swap(i, j int) {
 	R[i], R[j] = R[j], R[i]
+}
+
+// take the menu.fg, menu.bg, ect. and return rgb values as uint8 values
+func convertStrToInt32(color string) (r, g, b uint8) {
+	return
 }
