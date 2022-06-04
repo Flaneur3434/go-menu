@@ -127,36 +127,44 @@ func main() {
 					case sdl.K_BACKSPACE:
 						if len(menu.KeyBoardInput) > 0 {
 							menu.KeyBoardInput = menu.KeyBoardInput[:len(menu.KeyBoardInput)-1]
-							updateChan <- true
+							keyBoardChan <- menu.KeyBoardInput
 						}
 					case sdl.K_UP:
 						menu.ScrollMenuUp()
+						updateChan <- true
 					case sdl.K_DOWN:
 						menu.ScrollMenuDown()
+						updateChan <- true
 					default:
 						menu.KeyBoardInput += string(t.Keysym.Sym)
-						updateChan <- true
+						keyBoardChan <- menu.KeyBoardInput
 					}
 				}
-				keyBoardChan <- menu.KeyBoardInput
+				menu.WriteKeyBoard()
 			}()
+		}
 
-			go func() {
-				select {
-				case <-updateChan:
-					util.FuzzySearch(&fuzzList, <-keyBoardChan)
-				default:
-				}
-				ranksChan <- fuzzList
-			}()
-
+		go func() {
 			select {
-			case ranks := <-ranksChan:
-				menu.WriteItem(ranks)
-				menu.WriteKeyBoard()
-			default:
-				menu.WriteKeyBoard()
+			case keyBoardInput := <-keyBoardChan:
+				fmt.Printf("keyBoardInput changed\n\n\n: %s\n", keyBoardInput)
+				util.FuzzySearch(&fuzzList, keyBoardInput)
+				fmt.Printf("show update ranks\n\n\n: %#v\n", fuzzList)
+				ranksChan <- fuzzList
+			case <-updateChan:
+				// need to synce with the first go routine
+				updateChan <- true
+				fmt.Printf("probably scrolling, but need to update screen\n\n\n")
 			}
+		}()
+
+		select {
+		case ranks := <-ranksChan:
+			menu.WriteItem(ranks)
+		case <-updateChan:
+			// show previous fuzzList to screen
+			menu.WriteItem(fuzzList)
+		default:
 		}
 
 		sdl.Delay(3)

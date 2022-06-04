@@ -85,22 +85,23 @@ func SetUpMenu(fontPath string, menuChan chan *Menu, errChan chan error, normBac
 }
 
 func (m *Menu) WriteItem(R util.Ranks) error {
-	renderTextSlice := make([]*sdl.Surface, len(m.ItemList))
-	var numOfItemsToDraw int
-	if m.numOfRows <= len(renderTextSlice) {
-		numOfItemsToDraw = m.numOfRows
+	var numRender int
+	if len(R) < m.numOfRows {
+		numRender = len(R)
 	} else {
-		numOfItemsToDraw = len(renderTextSlice)
+		numRender = m.numOfRows
 	}
+
+	renderTextSlice := make([]*sdl.Surface, numRender)
 
 	// clear clear of any artifacts
 	m.renderer.Clear()
-	m.surface.FillRect(&sdl.Rect{X: 0, Y: 0, W: defaultWinSizeW, H: defaultWinSizeH}, 0)
+	m.surface.FillRect(&sdl.Rect{X: 0, Y: 0, W: defaultWinSizeW, H: defaultWinSizeH + 2}, 0)
 
 	// render stdin input
-	for i := m.topItem; i < numOfItemsToDraw; i++ {
-		if R[i].Rank != math.MaxFloat64 {
-			text, err := m.font.RenderUTF8Blended(R[i].Word, sdl.Color{R: 255, G: 0, B: 0, A: 255})
+	for i := range renderTextSlice {
+		if R[i+m.topItem].Rank != math.MaxFloat64 {
+			text, err := m.font.RenderUTF8Blended(R[i+m.topItem].Word, sdl.Color{R: 255, G: 0, B: 0, A: 255})
 			if err != nil {
 				return err
 			}
@@ -109,7 +110,7 @@ func (m *Menu) WriteItem(R util.Ranks) error {
 	}
 
 	// draw stdin input
-	for i := 0; i < numOfItemsToDraw; i++ {
+	for i := range renderTextSlice {
 		if err := renderTextSlice[i].Blit(nil, m.surface, &sdl.Rect{X: 1, Y: 1 + int32((i * fontSize)), W: 0, H: 0}); err != nil {
 			return err
 		}
@@ -118,8 +119,6 @@ func (m *Menu) WriteItem(R util.Ranks) error {
 	for _, sur := range renderTextSlice {
 		defer sur.Free()
 	}
-
-	m.window.UpdateSurface()
 
 	return nil
 }
@@ -181,6 +180,10 @@ func (m *Menu) ScrollMenuUp() {
 	if m.topItem-1 >= 0 {
 		m.topItem--
 	}
+}
+
+func (m *Menu) ResetTopItem() {
+	m.topItem = 0
 }
 
 // use gfx.ThickLineRGBA and gfx.StringRGBA to draw a thick line with the color
