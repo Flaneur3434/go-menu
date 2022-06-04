@@ -122,7 +122,7 @@ func main() {
 		case *sdl.KeyboardEvent:
 			go func() {
 				// TODO: unicode support, shift key
-				if t.State == sdl.RELEASED {
+				if t.State == sdl.PRESSED {
 					switch t.Keysym.Sym {
 					case sdl.K_BACKSPACE:
 						if len(menu.KeyBoardInput) > 0 {
@@ -147,19 +147,18 @@ func main() {
 		go func() {
 			select {
 			case keyBoardInput := <-keyBoardChan:
-				fmt.Printf("keyBoardInput changed\n\n\n: %s\n", keyBoardInput)
 				util.FuzzySearch(&fuzzList, keyBoardInput)
-				fmt.Printf("show update ranks\n\n\n: %#v\n", fuzzList)
 				ranksChan <- fuzzList
 			case <-updateChan:
 				// need to synce with the first go routine
 				updateChan <- true
-				fmt.Printf("probably scrolling, but need to update screen\n\n\n")
 			}
 		}()
 
 		select {
 		case ranks := <-ranksChan:
+			menu.ResetTopItem()
+			// sometimes the screen blanks out and the search results are wrong
 			menu.WriteItem(ranks)
 		case <-updateChan:
 			// show previous fuzzList to screen
