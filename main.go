@@ -20,6 +20,7 @@ const (
 )
 
 var (
+	// flag variables
 	grabKeyBoard    bool
 	caseInsensitive bool
 	lines           int
@@ -30,6 +31,10 @@ var (
 	selBackg        string
 	selForeg        string
 	help            bool
+
+	// variables used in main function
+	keyBoardInput string
+	menu          *draw.Menu
 )
 
 func init() {
@@ -77,18 +82,14 @@ func main() {
 	}
 
 	stdInChan := make(chan string)
-	menuChan := make(chan *draw.Menu)
-	errChan := make(chan error)
-	keyBoardChan := make(chan string)
-	ranksChan := make(chan util.Ranks)
-	updateChan := make(chan bool)
-
-	input := make([]string, 0, inputDefaultSize)
-	var menu *draw.Menu
-
-	go draw.SetUpMenu(fontPath, menuChan, errChan, normBackg, normForeg, selBackg, selForeg)
 	go util.ReadStdIn(stdInChan)
 
+	input := make([]string, 0, inputDefaultSize)
+	menuChan := make(chan *draw.Menu)
+	errChan := make(chan error)
+	go draw.SetUpMenu(fontPath, input, menuChan, errChan, normBackg, normForeg, selBackg, selForeg)
+
+	// store results from ReadStdIn
 	for s := range stdInChan {
 		if len(input) == cap(input) {
 			input = append(input, make([]string, 0, int(float64(cap(input))*defaultGrowthSize))...)
@@ -96,24 +97,28 @@ func main() {
 		input = append(input, s)
 	}
 
+	// handle any errors from SetUpMenu
 	menu = <-menuChan
 	if err := <-errChan; err != nil {
 		panic(err)
 	}
 
-	menu.ItemList = input
-	fuzzList := util.InitRanks(menu.ItemList)
-
+	// draw the initial view of the gui from ReadStdIn
+	fuzzList := util.InitRanks(input)
 	if err := menu.WriteItem(fuzzList); err != nil {
 		panic(err)
 	}
 
-	if err := menu.WriteKeyBoard(); err != nil {
+	if err := menu.WriteKeyBoard(keyBoardInput); err != nil {
 		panic(err)
 	}
 
 	// main loop
 	running := true
+	keyBoardChan := make(chan string)
+	updateChan := make(chan bool)
+	ranksChan := make(chan util.Ranks)
+
 	for running {
 		event := sdl.PollEvent()
 		switch t := event.(type) {
@@ -125,9 +130,9 @@ func main() {
 				if t.State == sdl.PRESSED {
 					switch t.Keysym.Sym {
 					case sdl.K_BACKSPACE:
-						if len(menu.KeyBoardInput) > 0 {
-							menu.KeyBoardInput = menu.KeyBoardInput[:len(menu.KeyBoardInput)-1]
-							keyBoardChan <- menu.KeyBoardInput
+						if len(keyBoardInput) > 0 {
+							keyBoardInput = keyBoardInput[:len(keyBoardInput)-1]
+							keyBoardChan <- keyBoardInput
 						}
 					case sdl.K_UP:
 						menu.ScrollMenuUp()
@@ -136,19 +141,18 @@ func main() {
 						menu.ScrollMenuDown()
 						updateChan <- true
 					default:
-						menu.KeyBoardInput += string(t.Keysym.Sym)
-						keyBoardChan <- menu.KeyBoardInput
+						keyBoardInput += string(t.Keysym.Sym)
+						keyBoardChan <- keyBoardInput
 					}
 				}
-				menu.WriteKeyBoard()
+				menu.WriteKeyBoard(keyBoardInput)
 			}()
 		}
 
 		go func() {
 			select {
 			case keyBoardInput := <-keyBoardChan:
-				util.FuzzySearch(&fuzzList, keyBoardInput)
-				ranksChan <- fuzzList
+				ranksChan <- util.FuzzySearch(input, keyBoardInput)
 			case <-updateChan:
 				// need to synce with the first go routine
 				updateChan <- true
@@ -158,7 +162,7 @@ func main() {
 		select {
 		case ranks := <-ranksChan:
 			menu.ResetTopItem()
-			// sometimes the screen blanks out and the search results are wrong
+			// sometimes the screen overlaps with prev
 			menu.WriteItem(ranks)
 		case <-updateChan:
 			// show previous fuzzList to screen

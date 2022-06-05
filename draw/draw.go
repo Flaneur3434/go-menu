@@ -18,14 +18,13 @@ const (
 )
 
 type Menu struct {
-	window        *sdl.Window
-	renderer      *sdl.Renderer
-	surface       *sdl.Surface
-	font          *ttf.Font
-	numOfRows     int
-	topItem       int
-	ItemList      []string
-	KeyBoardInput string
+	window    *sdl.Window
+	renderer  *sdl.Renderer
+	surface   *sdl.Surface
+	font      *ttf.Font
+	numOfRows int
+	topItem   int
+	itemList  []string
 
 	normBackg string
 	normForeg string
@@ -33,19 +32,18 @@ type Menu struct {
 	selForeg  string
 }
 
-func SetUpMenu(fontPath string, menuChan chan *Menu, errChan chan error, normBackg, normForeg, selBackg, selForeg string) {
+func SetUpMenu(fontPath string, input []string, menuChan chan *Menu, errChan chan error, normBackg, normForeg, selBackg, selForeg string) {
 	var err error
 	m := Menu{window: nil,
-		surface:       nil,
-		font:          nil,
-		numOfRows:     int(defaultWinSizeH / fontSize),
-		topItem:       0,
-		ItemList:      nil,
-		KeyBoardInput: "",
-		normBackg:     normBackg,
-		normForeg:     normForeg,
-		selBackg:      selBackg,
-		selForeg:      selForeg}
+		surface:   nil,
+		font:      nil,
+		numOfRows: int(defaultWinSizeH / fontSize),
+		topItem:   0,
+		itemList:  input,
+		normBackg: normBackg,
+		normForeg: normForeg,
+		selBackg:  selBackg,
+		selForeg:  selForeg}
 
 	// create window
 	pixelHeight := int(defaultWinSizeH/fontSize)*fontSize + int(defaultWinSizeH/fontSize) + fontSize
@@ -123,14 +121,14 @@ func (m *Menu) WriteItem(R util.Ranks) error {
 	return nil
 }
 
-func (m *Menu) WriteKeyBoard() error {
+func (m *Menu) WriteKeyBoard(keyBoardInput string) error {
 	// clear clear of any artifacts
 	m.renderer.Clear()
 	m.surface.FillRect(&sdl.Rect{X: 1, Y: (defaultWinSizeH/fontSize)*fontSize + defaultWinSizeH/fontSize, W: defaultWinSizeW, H: fontSize}, 0)
 
-	if len(m.KeyBoardInput) > 0 {
+	if len(keyBoardInput) > 0 {
 		// render keyboard input
-		text, err := m.font.RenderUTF8Blended(m.KeyBoardInput, sdl.Color{R: 0, G: 255, B: 0, A: 255})
+		text, err := m.font.RenderUTF8Blended(keyBoardInput, sdl.Color{R: 0, G: 255, B: 0, A: 255})
 		if err != nil {
 			return err
 		}
@@ -170,7 +168,7 @@ func (m *Menu) CleanUp() {
 
 // Move the menu down by one item
 func (m *Menu) ScrollMenuDown() {
-	if m.topItem+1 < len(m.ItemList)-m.numOfRows {
+	if m.topItem+1 < len(m.itemList)-m.numOfRows {
 		m.topItem++
 	}
 }

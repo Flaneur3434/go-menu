@@ -73,39 +73,36 @@ func match(s, t string) float64 {
 	}
 }
 
-func FuzzySearch(R *Ranks, target string) {
-	chunks := int(len(*R) / numOfThreads)
-	tailcaseChunk := len(*R) % numOfThreads
+func FuzzySearch(list []string, target string) Ranks {
+	chunks := int(len(list) / numOfThreads)
+	tailcaseChunk := len(list) % numOfThreads
 	out := make(chan Ranks)
 
 	for i := 0; i < numOfThreads; i++ {
-		go func(idx int, in chan Ranks) {
+		go func(threadN int, in chan Ranks) {
 			var rankSlice Ranks
-			for idx, j := 0, idx*chunks; idx < chunks; {
-				rankSlice = append(rankSlice, Rank{Word: (*R)[j].Word, Rank: match(target, (*R)[j].Word)})
-				idx++
-				j++
+			for j := threadN * chunks; j < (threadN+1)*chunks; j++ {
+				rankSlice = append(rankSlice, Rank{Word: list[j], Rank: match(target, list[j])})
 			}
 
 			in <- rankSlice
 		}(i, out)
 	}
 
-	finalRanks := make(Ranks, 0, len(*R))
+	finalRanks := make(Ranks, 0, len(list))
 	for len(finalRanks) != chunks*numOfThreads {
 		finalRanks = append(finalRanks, <-out...)
 	}
 
 	for i := 0; i < tailcaseChunk; i++ {
 		idx := i + chunks*numOfThreads
-		finalRanks = append(finalRanks, Rank{Word: (*R)[idx].Word, Rank: match(target, (*R)[idx].Word)})
+		finalRanks = append(finalRanks, Rank{Word: list[idx], Rank: match(target, list[idx])})
 		idx++
 	}
 
 	sort.Sort(finalRanks)
 
-	// why? because of thread thrashing (probably)
-	*R = finalRanks
+	return finalRanks
 }
 
 func (R Ranks) Len() int {
