@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"sync"
 
 	"github.com/Flaneur3434/go-menu/util"
-	_ "github.com/veandco/go-sdl2/gfx"
 	"github.com/veandco/go-sdl2/sdl"
 	"github.com/veandco/go-sdl2/ttf"
 )
@@ -17,14 +17,19 @@ const (
 	defaultWinSizeW = 640
 )
 
+var (
+	mu          sync.Mutex
+	currentItem int = 0
+	topItem     int = 0
+)
+
 type Menu struct {
 	window    *sdl.Window
 	renderer  *sdl.Renderer
 	surface   *sdl.Surface
 	font      *ttf.Font
 	numOfRows int
-	topItem   int
-	itemList  []string
+	numOfItem int
 
 	normBackg string
 	normForeg string
@@ -32,14 +37,13 @@ type Menu struct {
 	selForeg  string
 }
 
-func SetUpMenu(fontPath string, input []string, menuChan chan *Menu, errChan chan error, normBackg, normForeg, selBackg, selForeg string) {
+func SetUpMenu(fontPath string, menuChan chan *Menu, errChan chan error, normBackg, normForeg, selBackg, selForeg string) {
 	var err error
 	m := Menu{window: nil,
 		surface:   nil,
 		font:      nil,
 		numOfRows: int(defaultWinSizeH / fontSize),
-		topItem:   0,
-		itemList:  input,
+		numOfItem: 0,
 		normBackg: normBackg,
 		normForeg: normForeg,
 		selBackg:  selBackg,
@@ -82,42 +86,19 @@ func SetUpMenu(fontPath string, input []string, menuChan chan *Menu, errChan cha
 	errChan <- nil
 }
 
-func (m *Menu) WriteItem(R util.Ranks) error {
-	var numRender int
-	if len(R) < m.numOfRows {
-		numRender = len(R)
-	} else {
-		numRender = m.numOfRows
-	}
-
-	renderTextSlice := make([]*sdl.Surface, numRender)
+func (m *Menu) WriteItem(R *util.Ranks) error {
 
 	// clear clear of any artifacts
 	m.renderer.Clear()
 	m.surface.FillRect(&sdl.Rect{X: 0, Y: 0, W: defaultWinSizeW, H: defaultWinSizeH + 2}, 0)
 
-	// render stdin input
-	for i := range renderTextSlice {
-		if R[i+m.topItem].Rank != math.MaxFloat64 {
-			text, err := m.font.RenderUTF8Blended(R[i+m.topItem].Word, sdl.Color{R: 255, G: 0, B: 0, A: 255})
-			if err != nil {
-				return err
-			}
-			renderTextSlice[i] = text
-		}
-	}
+	// draw normal item
+	m.drawNorm(R)
 
-	// draw stdin input
-	for i := range renderTextSlice {
-		if err := renderTextSlice[i].Blit(nil, m.surface, &sdl.Rect{X: 1, Y: 1 + int32((i * fontSize)), W: 0, H: 0}); err != nil {
-			return err
-		}
-	}
+	// draw selected item
+	m.drawSel((*R)[currentItem+topItem].Word)
 
-	for _, sur := range renderTextSlice {
-		defer sur.Free()
-	}
-
+	m.window.UpdateSurface()
 	return nil
 }
 
@@ -143,7 +124,6 @@ func (m *Menu) WriteKeyBoard(keyBoardInput string) error {
 	}
 
 	m.window.UpdateSurface()
-
 	return nil
 }
 
@@ -166,32 +146,119 @@ func (m *Menu) CleanUp() {
 	os.Exit(0)
 }
 
+func (m *Menu) SetNumOfItem(len int) {
+	m.numOfItem = len
+}
+
+/*
+ * currentItem can be in the range of 0 to 31
+ * topItem is a multiple of m.numOfRows and can be 0 to (m.numOfItem - 1)
+ */
+
 // Move the menu down by one item
 func (m *Menu) ScrollMenuDown() {
-	if m.topItem+1 < len(m.itemList)-m.numOfRows {
-		m.topItem++
+	mu.Lock()
+	defer mu.Unlock()
+	if topItem < m.numOfItem && (currentItem+1)%m.numOfRows == 0 {
+		topItem += m.numOfRows
+		currentItem = 0
+	} else if (currentItem+1)%m.numOfRows != 0 {
+		currentItem++
 	}
 }
 
 // Move the menu Up by one item
 func (m *Menu) ScrollMenuUp() {
-	if m.topItem-1 >= 0 {
-		m.topItem--
+	mu.Lock()
+	defer mu.Unlock()
+	if topItem >= m.numOfRows && currentItem%m.numOfRows == 0 {
+		topItem -= m.numOfRows
+		currentItem = m.numOfRows - 1
+	} else if currentItem%m.numOfRows != 0 {
+		currentItem--
 	}
 }
 
-func (m *Menu) ResetTopItem() {
-	m.topItem = 0
+func (m *Menu) ResetPosCounters() {
+	mu.Lock()
+	defer mu.Unlock()
+	topItem = 0
+	currentItem = 0
 }
 
-// use gfx.ThickLineRGBA and gfx.StringRGBA to draw a thick line with the color
-// defined by selForeg and selBackg
-func (m *Menu) drawSel(posY int) (err error) {
+func (m *Menu) drawSel(text string) (err error) {
+	var textRender *sdl.Surface
+	var backGRender *sdl.Surface
+	backGRender, err = sdl.CreateRGBSurface(0, defaultWinSizeW, fontSize, 32, 0, 0, 0, 0)
+
+	// get color
+	rB, gB, bB := util.ConvertStrToInt32(m.selBackg)
+	rF, gF, bF := util.ConvertStrToInt32(m.selForeg)
+	colorB := sdl.MapRGB(m.surface.Format, rB, gB, bB)
+
+	// using variables cause its easier to read
+	var x1 int32 = 0
+	var y1 int32 = int32(fontSize * currentItem)
+	var x2 int32 = defaultWinSizeW
+	var y2 int32 = y1 + fontSize
+
+	// rendering part
+	backGRender.FillRect(&sdl.Rect{X: x1, Y: y1, W: x2, H: y2}, colorB)
+	textRender, err = m.font.RenderUTF8Blended(text, sdl.Color{R: rF, G: gF, B: bF, A: 255})
+	textRender.Blit(nil, backGRender, &sdl.Rect{X: x1, Y: y1, W: x2, H: y2})
+	backGRender.Blit(nil, m.surface, &sdl.Rect{X: x1, Y: y1, W: x2, H: y2})
+	defer textRender.Free()
+	defer backGRender.Free()
+
 	return
 }
 
 // use gfx.BoxRGBA and gfx.StringRGBA to draw a thick line with the color
 // defined by normForeg and normBackg
-func (m *Menu) drawNorm() (err error) {
+func (m *Menu) drawNorm(R *util.Ranks) (err error) {
+	var numRender int
+	if len(*R) < m.numOfRows {
+		numRender = len(*R)
+	} else {
+		numRender = m.numOfRows
+	}
+	renderTextSlice := make([]*sdl.Surface, numRender)
+
+	var backGRender *sdl.Surface
+	backGRender, err = sdl.CreateRGBSurface(0, defaultWinSizeW, defaultWinSizeH, 32, 0, 0, 0, 0)
+
+	// get color
+	rB, gB, bB := util.ConvertStrToInt32(m.normBackg)
+	rF, gF, bF := util.ConvertStrToInt32(m.normForeg)
+
+	colorB := sdl.MapRGB(m.surface.Format, rB, gB, bB)
+
+	backGRender.FillRect(&sdl.Rect{X: 0, Y: 0, W: defaultWinSizeW, H: defaultWinSizeH}, colorB)
+
+	// render stdin input
+	for i := range renderTextSlice {
+		if (*R)[i+topItem].Rank != math.MaxFloat64 {
+			text, err := m.font.RenderUTF8Blended((*R)[i+topItem].Word, sdl.Color{R: rF, G: gF, B: bF, A: 255})
+			if err != nil {
+				return err
+			}
+			renderTextSlice[i] = text
+		}
+	}
+
+	// draw normal item
+	for i := range renderTextSlice {
+		if err := renderTextSlice[i].Blit(nil, backGRender, &sdl.Rect{X: 1, Y: 1 + int32((i * fontSize)), W: 0, H: 0}); err != nil {
+			return err
+		}
+	}
+
+	backGRender.Blit(nil, m.surface, &sdl.Rect{X: 0, Y: 0, W: defaultWinSizeW, H: defaultWinSizeH})
+
+	for _, sur := range renderTextSlice {
+		defer sur.Free()
+	}
+
+	defer backGRender.Free()
 	return
 }

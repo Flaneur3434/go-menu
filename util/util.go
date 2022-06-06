@@ -118,6 +118,6 @@ func (R Ranks) Swap(i, j int) {
 }
 
 // take the menu.fg, menu.bg, ect. and return rgb values as uint8 values
-func convertStrToInt32(color string) (r, g, b uint8) {
+func ConvertStrToInt32(color string) (r, b, g uint8) {
 	return
 }

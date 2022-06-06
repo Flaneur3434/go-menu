@@ -87,7 +87,7 @@ func main() {
 	input := make([]string, 0, inputDefaultSize)
 	menuChan := make(chan *draw.Menu)
 	errChan := make(chan error)
-	go draw.SetUpMenu(fontPath, input, menuChan, errChan, normBackg, normForeg, selBackg, selForeg)
+	go draw.SetUpMenu(fontPath, menuChan, errChan, normBackg, normForeg, selBackg, selForeg)
 
 	// store results from ReadStdIn
 	for s := range stdInChan {
@@ -105,19 +105,19 @@ func main() {
 
 	// draw the initial view of the gui from ReadStdIn
 	fuzzList := util.InitRanks(input)
-	if err := menu.WriteItem(fuzzList); err != nil {
-		panic(err)
-	}
-
-	if err := menu.WriteKeyBoard(keyBoardInput); err != nil {
-		panic(err)
-	}
+	menu.SetNumOfItem(fuzzList.Len())
+	go func() {
+		if err := menu.WriteItem(&fuzzList); err != nil {
+			panic(err)
+		}
+	}()
 
 	// main loop
 	running := true
 	keyBoardChan := make(chan string)
 	updateChan := make(chan bool)
-	ranksChan := make(chan util.Ranks)
+	newRanksChan := make(chan util.Ranks)
+	var prevRanks util.Ranks
 
 	for running {
 		event := sdl.PollEvent()
@@ -132,6 +132,7 @@ func main() {
 					case sdl.K_BACKSPACE:
 						if len(keyBoardInput) > 0 {
 							keyBoardInput = keyBoardInput[:len(keyBoardInput)-1]
+							menu.WriteKeyBoard(keyBoardInput)
 							keyBoardChan <- keyBoardInput
 						}
 					case sdl.K_UP:
@@ -142,17 +143,17 @@ func main() {
 						updateChan <- true
 					default:
 						keyBoardInput += string(t.Keysym.Sym)
+						menu.WriteKeyBoard(keyBoardInput)
 						keyBoardChan <- keyBoardInput
 					}
 				}
-				menu.WriteKeyBoard(keyBoardInput)
 			}()
 		}
 
 		go func() {
 			select {
 			case keyBoardInput := <-keyBoardChan:
-				ranksChan <- util.FuzzySearch(input, keyBoardInput)
+				newRanksChan <- util.FuzzySearch(input, keyBoardInput)
 			case <-updateChan:
 				// need to synce with the first go routine
 				updateChan <- true
@@ -160,17 +161,19 @@ func main() {
 		}()
 
 		select {
-		case ranks := <-ranksChan:
-			menu.ResetTopItem()
+		case ranks := <-newRanksChan:
+			menu.ResetPosCounters()
 			// sometimes the screen overlaps with prev
-			menu.WriteItem(ranks)
+			menu.WriteItem(&ranks)
+			// select statement acts like a mutex and only one thread can update this variable at a time
+			prevRanks = ranks
 		case <-updateChan:
 			// show previous fuzzList to screen
-			menu.WriteItem(fuzzList)
+			menu.WriteItem(&prevRanks)
 		default:
 		}
 
-		sdl.Delay(3)
+		sdl.Delay(10)
 	}
 
 	menu.CleanUp()
