@@ -87,15 +87,12 @@ func SetUpMenu(fontPath string, menuChan chan *Menu, errChan chan error, normBac
 }
 
 func (m *Menu) WriteItem(R *util.Ranks) error {
-
 	// clear clear of any artifacts
 	m.renderer.Clear()
 	m.surface.FillRect(&sdl.Rect{X: 0, Y: 0, W: defaultWinSizeW, H: defaultWinSizeH + 2}, 0)
 
-	// draw normal item
+	// probably can make parallel but drawNorm clears screen
 	m.drawNorm(R)
-
-	// draw selected item
 	m.drawSel((*R)[currentItem+topItem].Word)
 
 	m.window.UpdateSurface()
@@ -186,7 +183,14 @@ func (m *Menu) ResetPosCounters() {
 	currentItem = 0
 }
 
+// TODO: error checking, commenting, refactoring
 func (m *Menu) drawSel(text string) (err error) {
+	// using variables cause its easier to read
+	var x1 int32 = 0
+	var y1 int32 = int32(fontSize * currentItem)
+	var x2 int32 = defaultWinSizeW
+	var y2 int32 = y1 + fontSize
+
 	var textRender *sdl.Surface
 	var backGRender *sdl.Surface
 	backGRender, err = sdl.CreateRGBSurface(0, defaultWinSizeW, fontSize, 32, 0, 0, 0, 0)
@@ -196,16 +200,10 @@ func (m *Menu) drawSel(text string) (err error) {
 	rF, gF, bF := util.ConvertStrToInt32(m.selForeg)
 	colorB := sdl.MapRGB(m.surface.Format, rB, gB, bB)
 
-	// using variables cause its easier to read
-	var x1 int32 = 0
-	var y1 int32 = int32(fontSize * currentItem)
-	var x2 int32 = defaultWinSizeW
-	var y2 int32 = y1 + fontSize
-
 	// rendering part
-	backGRender.FillRect(&sdl.Rect{X: x1, Y: y1, W: x2, H: y2}, colorB)
+	backGRender.FillRect(&sdl.Rect{X: 0, Y: 0, W: defaultWinSizeW, H: fontSize}, colorB)
 	textRender, err = m.font.RenderUTF8Blended(text, sdl.Color{R: rF, G: gF, B: bF, A: 255})
-	textRender.Blit(nil, backGRender, &sdl.Rect{X: x1, Y: y1, W: x2, H: y2})
+	textRender.Blit(nil, backGRender, &sdl.Rect{X: 0, Y: 0, W: defaultWinSizeH, H: fontSize})
 	backGRender.Blit(nil, m.surface, &sdl.Rect{X: x1, Y: y1, W: x2, H: y2})
 	defer textRender.Free()
 	defer backGRender.Free()
@@ -213,8 +211,7 @@ func (m *Menu) drawSel(text string) (err error) {
 	return
 }
 
-// use gfx.BoxRGBA and gfx.StringRGBA to draw a thick line with the color
-// defined by normForeg and normBackg
+// TODO: error checking, commenting, refactoring
 func (m *Menu) drawNorm(R *util.Ranks) (err error) {
 	var numRender int
 	if len(*R) < m.numOfRows {

@@ -117,7 +117,7 @@ func main() {
 	keyBoardChan := make(chan string)
 	updateChan := make(chan bool)
 	newRanksChan := make(chan util.Ranks)
-	var prevRanks util.Ranks
+	prevRanks := fuzzList
 
 	for running {
 		event := sdl.PollEvent()

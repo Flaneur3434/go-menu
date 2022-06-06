@@ -118,6 +118,8 @@ func (R Ranks) Swap(i, j int) {
 }
 
 // take the menu.fg, menu.bg, ect. and return rgb values as uint8 values
-func ConvertStrToInt32(color string) (r, b, g uint8) {
+func ConvertStrToInt32(color string) (r, g, b uint8) {
+	var garbage string
+	fmt.Sscanf(color, "%1s%2x%2x%2x", &garbage, &r, &g, &b)
 	return
 }
