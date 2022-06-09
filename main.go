@@ -87,6 +87,7 @@ func main() {
 	input := make([]string, 0, inputDefaultSize)
 	menuChan := make(chan *draw.Menu)
 	errChan := make(chan error)
+	// TODO make this a cloture, dont pass in channels
 	go draw.SetUpMenu(fontPath, menuChan, errChan, normBackg, normForeg, selBackg, selForeg)
 
 	// store results from ReadStdIn
@@ -136,10 +137,10 @@ func main() {
 							keyBoardChan <- keyBoardInput
 						}
 					case sdl.K_UP:
-						menu.ScrollMenuUp()
+						menu.ScrollMenuUp(&prevRanks)
 						updateChan <- true
 					case sdl.K_DOWN:
-						menu.ScrollMenuDown()
+						menu.ScrollMenuDown(&prevRanks)
 						updateChan <- true
 					default:
 						keyBoardInput += string(t.Keysym.Sym)

@@ -76,28 +76,44 @@ func match(s, t string) float64 {
 func FuzzySearch(list []string, target string) Ranks {
 	chunks := int(len(list) / numOfThreads)
 	tailcaseChunk := len(list) % numOfThreads
-	out := make(chan Ranks)
+	RanksChan := make(chan Ranks)
+	// syncChan: used to signal when all of the go routines end
+	syncChan := make(chan int)
 
 	for i := 0; i < numOfThreads; i++ {
-		go func(threadN int, in chan Ranks) {
+		go func(threadN int) {
 			var rankSlice Ranks
 			for j := threadN * chunks; j < (threadN+1)*chunks; j++ {
-				rankSlice = append(rankSlice, Rank{Word: list[j], Rank: match(target, list[j])})
+				if rankNum := match(target, list[j]); rankNum != math.MaxFloat64 {
+					rankSlice = append(rankSlice, Rank{Word: list[j], Rank: rankNum})
+				}
 			}
 
-			in <- rankSlice
-		}(i, out)
+			RanksChan <- rankSlice
+			syncChan <- 1
+		}(i)
 	}
+
+	go func() {
+		var rankSlice Ranks
+		for i := 0; i < tailcaseChunk; i++ {
+			idx := i + chunks*numOfThreads
+			if rankNum := match(target, list[idx]); rankNum != math.MaxFloat64 {
+				rankSlice = append(rankSlice, Rank{Word: list[idx], Rank: rankNum})
+			}
+
+			idx++
+		}
+		RanksChan <- rankSlice
+		syncChan <- 1
+	}()
 
 	finalRanks := make(Ranks, 0, len(list))
-	for len(finalRanks) != chunks*numOfThreads {
-		finalRanks = append(finalRanks, <-out...)
-	}
-
-	for i := 0; i < tailcaseChunk; i++ {
-		idx := i + chunks*numOfThreads
-		finalRanks = append(finalRanks, Rank{Word: list[idx], Rank: match(target, list[idx])})
-		idx++
+	syncChanTotal := 0
+	// numOfThreads + 1 because we need to account for the tail case go routine
+	for syncChanTotal < (numOfThreads + 1) {
+		finalRanks = append(finalRanks, <-RanksChan...)
+		syncChanTotal += <-syncChan
 	}
 
 	sort.Sort(finalRanks)
