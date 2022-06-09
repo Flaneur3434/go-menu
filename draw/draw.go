@@ -282,3 +282,14 @@ func (m *Menu) ResetPosCounters() {
 	topItem = 0
 	currentItem = 0
 }
+
+func (m *Menu) GetSelItem(R *util.Ranks) {
+	var idx int
+	if currentItem+topItem < len(*R) {
+		idx = currentItem + topItem
+	} else {
+		idx = len(*R) - 1
+	}
+
+	fmt.Fprintf(os.Stdout, "%s\n", (*R)[idx].Word)
+}

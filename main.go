@@ -24,7 +24,6 @@ var (
 	grabKeyBoard    bool
 	caseInsensitive bool
 	lines           int
-	prompt          string
 	fontPath        string
 	normBackg       string
 	normForeg       string
@@ -41,12 +40,11 @@ func init() {
 	flag.BoolVar(&grabKeyBoard, "f", false, "dmenu  grabs  the keyboard before reading stdin if not reading from a tty. This  is  faster,  but  will  lock  up  X  until  stdin  reaches end-of-file.")
 	flag.BoolVar(&caseInsensitive, "i", false, "dmenu matches menu items case insensitively")
 	flag.IntVar(&lines, "l", 5, "dmenu lists items vertically, with the given number of lines")
-	flag.StringVar(&prompt, "p", "", "defines the prompt to be displayed to the left of the input field")
-	flag.StringVar(&fontPath, "fn", "", "defines the font or font set used")
-	flag.StringVar(&normBackg, "nb", "", "defines the normal background color. #RGB, #RRGGBB, and X color names are supported")
-	flag.StringVar(&normForeg, "nf", "", "defines the normal foreground color")
-	flag.StringVar(&selBackg, "sb", "", "defines the selected background color")
-	flag.StringVar(&selForeg, "sf", "", "defines the selected foreground color")
+	flag.StringVar(&fontPath, "fn", "./assets/zpix.ttf", "defines the font or font set used")
+	flag.StringVar(&normBackg, "nb", "#cccccc", "defines the normal background color. #RGB, #RRGGBB, and X color names are supported")
+	flag.StringVar(&normForeg, "nf", "#000000", "defines the normal foreground color")
+	flag.StringVar(&selBackg, "sb", "#0066ff", "defines the selected background color")
+	flag.StringVar(&selForeg, "sf", "#ffffff", "defines the selected foreground color")
 	flag.BoolVar(&help, "h", false, "print help message")
 	flag.BoolVar(&help, "help", false, "print help message")
 }
@@ -62,16 +60,6 @@ func main() {
 	// init sdl
 	if err := sdl.Init(sdl.INIT_VIDEO); err != nil {
 		panic(err)
-	}
-
-	// default font
-	if fontPath == "" {
-		fontPath = "./assets/zpix.ttf"
-	}
-
-	// default number of lines
-	if lines == 0 {
-		lines = 4
 	}
 
 	if help {
@@ -125,6 +113,12 @@ func main() {
 		switch t := event.(type) {
 		case *sdl.QuitEvent:
 			running = false
+		case *sdl.TextInputEvent:
+			go func() {
+				keyBoardInput += t.GetText()
+				menu.WriteKeyBoard(keyBoardInput)
+				keyBoardChan <- keyBoardInput
+			}()
 		case *sdl.KeyboardEvent:
 			go func() {
 				// TODO: unicode support, shift key
@@ -136,16 +130,15 @@ func main() {
 							menu.WriteKeyBoard(keyBoardInput)
 							keyBoardChan <- keyBoardInput
 						}
+					case sdl.K_RETURN:
+						menu.GetSelItem(&prevRanks)
+						running = false
 					case sdl.K_UP:
 						menu.ScrollMenuUp(&prevRanks)
 						updateChan <- true
 					case sdl.K_DOWN:
 						menu.ScrollMenuDown(&prevRanks)
 						updateChan <- true
-					default:
-						keyBoardInput += string(t.Keysym.Sym)
-						menu.WriteKeyBoard(keyBoardInput)
-						keyBoardChan <- keyBoardInput
 					}
 				}
 			}()
@@ -179,3 +172,5 @@ func main() {
 
 	menu.CleanUp()
 }
+
+// TODO: use the line argument
