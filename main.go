@@ -72,13 +72,13 @@ func main() {
 	}
 
 	stdInChan := make(chan string)
+	input := make([]string, 0, inputDefaultSize)
 	go util.ReadStdIn(stdInChan)
 
-	input := make([]string, 0, inputDefaultSize)
-	menuChan := make(chan *draw.Menu)
-	errChan := make(chan error)
-	// TODO make this a cloture, dont pass in channels
-	go draw.SetUpMenu(fontPath, menuChan, errChan, normBackg, normForeg, selBackg, selForeg)
+	menu, err := draw.SetUpMenu(fontPath, normBackg, normForeg, selBackg, selForeg)
+	if err != nil {
+		panic(err)
+	}
 
 	// store results from ReadStdIn
 	for s := range stdInChan {
@@ -88,20 +88,12 @@ func main() {
 		input = append(input, s)
 	}
 
-	// handle any errors from SetUpMenu
-	menu = <-menuChan
-	if err := <-errChan; err != nil {
-		panic(err)
-	}
-
 	// draw the initial view of the gui from ReadStdIn
 	fuzzList := util.InitRanks(input)
 	menu.SetNumOfItem(fuzzList.Len())
-	go func() {
-		if err := menu.WriteItem(&fuzzList); err != nil {
-			panic(err)
-		}
-	}()
+	if err := menu.WriteItem(&fuzzList); err != nil {
+		panic(err)
+	}
 
 	// main loop
 	running := true
@@ -126,28 +118,26 @@ func main() {
 				keyBoardChan <- keyBoardInput
 			}()
 		case *sdl.KeyboardEvent:
-			go func() {
-				// TODO: unicode support, shift key
-				if t.State == sdl.PRESSED {
-					switch t.Keysym.Sym {
-					case sdl.K_BACKSPACE:
-						if len(keyBoardInput) > 0 {
-							keyBoardInput = keyBoardInput[:len(keyBoardInput)-1]
-							menu.WriteKeyBoard(keyBoardInput)
-							keyBoardChan <- keyBoardInput
-						}
-					case sdl.K_RETURN:
-						menu.GetSelItem(&prevRanks)
-						running = false
-					case sdl.K_UP:
-						menu.ScrollMenuUp(&prevRanks)
-						updateChan <- true
-					case sdl.K_DOWN:
-						menu.ScrollMenuDown(&prevRanks)
-						updateChan <- true
+			// TODO: unicode support, shift key
+			if t.State == sdl.PRESSED {
+				switch t.Keysym.Sym {
+				case sdl.K_BACKSPACE:
+					if len(keyBoardInput) > 0 {
+						keyBoardInput = keyBoardInput[:len(keyBoardInput)-1]
+						menu.WriteKeyBoard(keyBoardInput)
+						keyBoardChan <- keyBoardInput
 					}
+				case sdl.K_RETURN:
+					menu.GetSelItem(&prevRanks)
+					running = false
+				case sdl.K_UP:
+					menu.ScrollMenuUp(&prevRanks)
+					updateChan <- true
+				case sdl.K_DOWN:
+					menu.ScrollMenuDown(&prevRanks)
+					updateChan <- true
 				}
-			}()
+			}
 		}
 
 		go func() {

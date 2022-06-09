@@ -36,9 +36,8 @@ type Menu struct {
 	selForeg  string
 }
 
-func SetUpMenu(fontPath string, menuChan chan *Menu, errChan chan error, normBackg, normForeg, selBackg, selForeg string) {
-	var err error
-	m := Menu{window: nil,
+func SetUpMenu(fontPath string, normBackg, normForeg, selBackg, selForeg string) (m Menu, err error) {
+	m = Menu{window: nil,
 		surface:   nil,
 		font:      nil,
 		numOfRows: int(defaultWinSizeH / fontSize),
@@ -53,8 +52,6 @@ func SetUpMenu(fontPath string, menuChan chan *Menu, errChan chan error, normBac
 	m.window, err = sdl.CreateWindow("go-menu", sdl.WINDOWPOS_CENTERED, sdl.WINDOWPOS_CENTERED, defaultWinSizeW, int32(pixelHeight), sdl.WINDOW_SHOWN|sdl.WINDOW_SKIP_TASKBAR)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to create window: %s\n", err)
-		menuChan <- nil
-		errChan <- err
 		return
 	}
 
@@ -62,27 +59,20 @@ func SetUpMenu(fontPath string, menuChan chan *Menu, errChan chan error, normBac
 	m.renderer, err = sdl.CreateRenderer(m.window, -1, sdl.RENDERER_ACCELERATED)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to create renderer: %s\n", err)
-		menuChan <- nil
-		errChan <- err
 		return
 	}
 
 	// get surface
 	if m.surface, err = m.window.GetSurface(); err != nil {
-		menuChan <- nil
-		errChan <- err
 		return
 	}
 
 	// get font
 	if m.font, err = ttf.OpenFont(fontPath, fontSize); err != nil {
-		menuChan <- nil
-		errChan <- err
 		return
 	}
 
-	menuChan <- &m
-	errChan <- nil
+	return
 }
 
 func (m *Menu) WriteItem(R *util.Ranks) error {
