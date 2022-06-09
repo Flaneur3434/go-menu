@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"sort"
+	"strings"
 )
 
 const (
@@ -73,7 +74,7 @@ func match(s, t string) float64 {
 	}
 }
 
-func FuzzySearch(list []string, target string) Ranks {
+func FuzzySearch(list []string, target string, caseInsensitive bool) Ranks {
 	chunks := int(len(list) / numOfThreads)
 	tailcaseChunk := len(list) % numOfThreads
 	RanksChan := make(chan Ranks)
@@ -83,8 +84,15 @@ func FuzzySearch(list []string, target string) Ranks {
 	for i := 0; i < numOfThreads; i++ {
 		go func(threadN int) {
 			var rankSlice Ranks
+			var rankNum float64
 			for j := threadN * chunks; j < (threadN+1)*chunks; j++ {
-				if rankNum := match(target, list[j]); rankNum != math.MaxFloat64 {
+				if caseInsensitive {
+					rankNum = match(target, strings.ToLower(list[j]))
+				} else {
+					rankNum = match(target, list[j])
+				}
+
+				if rankNum != math.MaxFloat64 {
 					rankSlice = append(rankSlice, Rank{Word: list[j], Rank: rankNum})
 				}
 			}

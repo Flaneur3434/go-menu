@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"strings"
 
 	"github.com/Flaneur3434/go-menu/draw"
 	"github.com/Flaneur3434/go-menu/util"
@@ -67,6 +68,7 @@ func main() {
 			format := "\t-%s: %s (Default: '%s')\n"
 			fmt.Printf(format, flag.Name, flag.Usage, flag.DefValue)
 		})
+		return
 	}
 
 	stdInChan := make(chan string)
@@ -115,7 +117,11 @@ func main() {
 			running = false
 		case *sdl.TextInputEvent:
 			go func() {
-				keyBoardInput += t.GetText()
+				if caseInsensitive {
+					keyBoardInput += strings.ToLower(t.GetText())
+				} else {
+					keyBoardInput += t.GetText()
+				}
 				menu.WriteKeyBoard(keyBoardInput)
 				keyBoardChan <- keyBoardInput
 			}()
@@ -147,7 +153,7 @@ func main() {
 		go func() {
 			select {
 			case keyBoardInput := <-keyBoardChan:
-				newRanksChan <- util.FuzzySearch(input, keyBoardInput)
+				newRanksChan <- util.FuzzySearch(input, keyBoardInput, caseInsensitive)
 			case <-updateChan:
 				// need to synce with the first go routine
 				updateChan <- true
